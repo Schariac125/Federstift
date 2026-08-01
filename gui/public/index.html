@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang='zh-CN'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>羽笔 Federstift · AI 小说创作台</title>
+<style>
+:root{
+  --bg:#14121a; --panel:#1c1826; --panel2:#242033; --panel3:#2c2740;
+  --border:#332c4a; --border2:#443c63;
+  --text:#ece7f6; --muted:#9a91b8; --dim:#6f6790;
+  --accent:#d9a962; --accent-soft:#3a2f1e; --accent-line:#8a6a35;
+  --green:#7fc98a; --red:#e07070; --yellow:#d9b45f; --blue:#7aa7e0;
+  --radius:12px; --radius-s:8px;
+  --font:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;
+  --mono:'Cascadia Code','Consolas','JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.7;overflow:hidden}
+a{color:var(--blue);text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit;font-size:14px;color:var(--text);background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-s);padding:9px 12px;outline:none;width:100%}
+input:focus,textarea:focus,select:focus{border-color:var(--accent-line)}
+textarea{resize:vertical;line-height:1.8}
+::placeholder{color:var(--dim)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:6px;border:2px solid var(--bg)}
+::-webkit-scrollbar-track{background:transparent}
+#app{display:flex;height:100%}
+#sidebar{width:228px;flex:none;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 12px;gap:4px;overflow-y:auto}
+.logo{display:flex;align-items:center;gap:10px;padding:6px 10px 16px}
+.logo-mark{width:38px;height:38px;flex:none;border-radius:10px;background:linear-gradient(135deg,#3a2f1e,#5a4526);border:1px solid var(--accent-line);display:flex;align-items:center;justify-content:center;font-size:20px}
+.logo-name{font-size:16px;font-weight:700;letter-spacing:.5px}
+.logo-sub{font-size:11px;color:var(--dim)}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-s);color:var(--muted);cursor:pointer;border:1px solid transparent;font-size:14px}
+.nav-item:hover{background:var(--panel2);color:var(--text)}
+.nav-item.active{background:var(--panel3);color:var(--text);border-color:var(--border2)}
+.nav-item .ico{width:20px;text-align:center;flex:none}
+#sidebar .spacer{flex:1}
+#side-status{padding:10px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--dim);line-height:1.9}
+#side-status b{color:var(--muted);font-weight:600}
+#main{flex:1;overflow-y:auto;position:relative}
+.page{max-width:1080px;margin:0 auto;padding:28px 32px 80px}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+.page-title{font-size:24px;font-weight:700;letter-spacing:.5px}
+.page-sub{color:var(--muted);font-size:13px;margin-top:4px}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:var(--radius-s);border:1px solid var(--border2);background:var(--panel2);color:var(--text);font-size:14px;transition:filter .15s}
+.btn:hover{filter:brightness(1.15)}
+.btn.primary{background:linear-gradient(135deg,#b98a44,#d9a962);border-color:#a67c3c;color:#1c1508;font-weight:600}
+.btn.ghost{background:transparent;border-color:var(--border2);color:var(--muted)}
+.btn.ghost:hover{color:var(--text)}
+.btn.danger{background:transparent;border-color:#5a2c2c;color:var(--red)}
+.btn.small{padding:5px 11px;font-size:12.5px;border-radius:6px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px}
+.card + .card{margin-top:14px}
+.card-title{font-size:15px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.novel-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s}
+.novel-card:hover{border-color:var(--border2)}
+.novel-title{font-size:16px;font-weight:700}
+.novel-req{color:var(--muted);font-size:13px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.meta{display:flex;gap:14px;color:var(--dim);font-size:12px;flex-wrap:wrap}
+.meta b{color:var(--muted);font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:99px;font-size:12px;border:1px solid var(--border2);color:var(--muted);background:var(--panel2)}
+.chip.green{color:var(--green);border-color:#2f4a34;background:#16221a}
+.chip.yellow{color:var(--yellow);border-color:#4a4023;background:#221e12}
+.chip.red{color:var(--red);border-color:#4a2626;background:#221414}
+.chip.blue{color:var(--blue);border-color:#24344a;background:#141c26}
+.chip.accent{color:var(--accent);border-color:#4a3a22;background:#221c12}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:6px;font-weight:600}
+.field .hint{font-size:11.5px;color:var(--dim);margin-top:4px}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row > *{flex:1;min-width:140px}
+.check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:6px}
+.check-item{display:flex;gap:8px;align-items:flex-start;background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-s);padding:8px 11px;cursor:pointer;font-size:13px}
+.check-item:hover{border-color:var(--border2)}
+.check-item input{margin-top:4px;width:auto;accent-color:var(--accent)}
+.check-item .ci-name{font-weight:600}
+.check-item .ci-sub{color:var(--dim);font-size:11.5px}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:18px;overflow-x:auto}
+.tab{padding:9px 16px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;font-size:14px;white-space:nowrap}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+.empty{padding:44px 20px;text-align:center;color:var(--dim)}
+.empty .big{font-size:38px;margin-bottom:10px}
+#toast{position:fixed;top:20px;right:24px;z-index:999;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.toast-item{background:var(--panel3);border:1px solid var(--border2);border-left:3px solid var(--blue);border-radius:var(--radius-s);padding:11px 16px;max-width:420px;box-shadow:0 8px 30px rgba(0,0,0,.45);animation:toastIn .2s ease}
+.toast-item.err{border-left-color:var(--red)}
+.toast-item.ok{border-left-color:var(--green)}
+@keyframes toastIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+#overlay{position:fixed;inset:0;background:rgba(10,8,16,.62);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;backdrop-filter:blur(3px)}
+#overlay.hidden{display:none}
+#overlay .spin{width:44px;height:44px;border-radius:50%;border:3px solid var(--border2);border-top-color:var(--accent);animation:spin .9s linear infinite}
+#overlay .ov-text{color:var(--muted);font-size:14px}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* ---- session ---- */
+.sess-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:16px 0 14px;border-bottom:1px solid var(--border);margin-bottom:18px}
+.sess-title{font-size:20px;font-weight:700}
+.sess-meta{display:flex;gap:8px;flex-wrap:wrap}
+.sess-controls{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sess-controls select{width:auto;padding:6px 10px;font-size:12.5px}
+/* ---- 创作台（全屏会话页） ---- */
+body.session-mode #sidebar{display:none}
+body.session-mode #main{width:100%}
+.live-area{border:1px solid var(--accent-line);background:linear-gradient(180deg,#231c10,#191426);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px}
+.live-area.hidden{display:none}
+.live-head{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--accent);font-weight:600;margin-bottom:10px;flex-wrap:wrap}
+.live-head .chip{font-weight:400}
+.live-body{max-height:48vh;overflow-y:auto;padding-right:2px}
+.live-seg{margin-bottom:12px}
+.live-seg-head{font-size:11px;color:var(--dim);margin-bottom:4px}
+.live-seg-text{white-space:pre-wrap;font-size:14px;line-height:1.9;color:#d8d1e6;opacity:.85}
+.live-text{white-space:pre-wrap;font-size:14.5px;line-height:1.9;color:#e9e2f2}
+.live-cursor{display:inline-block;width:2px;height:1em;background:var(--accent);vertical-align:-2px;margin-left:2px;animation:blink 1s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+.live-log{margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+.live-log .ll{color:var(--muted)}
+.live-log .ll.plan{color:var(--accent)}
+.live-log .ll.review{color:var(--blue)}
+.pending{border:1px solid var(--accent-line);background:linear-gradient(180deg,#241d12,#1c1826);border-radius:var(--radius);padding:18px 20px;margin-bottom:18px}
+.pending-title{font-size:15px;font-weight:700;color:var(--accent);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.pending-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.text-view{background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-s);padding:14px 16px;white-space:pre-wrap;max-height:360px;overflow-y:auto;font-size:14.5px;line-height:1.9;color:#e6e0ee}
+.q-item{margin-bottom:12px}
+.q-item label{font-size:13px;color:var(--muted);display:block;margin-bottom:5px}
+.q-item label b{color:var(--text)}
+.sess-layout{display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start}
+@media(max-width:980px){.sess-layout{grid-template-columns:1fr}}
+.panel-box{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px}
+.panel-box h3{font-size:13.5px;color:var(--muted);margin-bottom:10px;font-weight:700;letter-spacing:.5px;display:flex;align-items:center;gap:7px;justify-content:space-between}
+.seg{background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-s);padding:13px 15px;margin-bottom:10px}
+.seg-head{font-size:11.5px;color:var(--dim);margin-bottom:5px;display:flex;gap:8px;align-items:center}
+.seg-text{white-space:pre-wrap;font-size:14px;color:#e3ddec;line-height:1.9}
+.ch-head{font-size:16px;font-weight:700;margin:18px 0 8px;padding-top:14px;border-top:1px dashed var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.log-item{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed var(--border);font-size:12.5px}
+.log-item .lt{color:var(--dim);flex:none;font-family:var(--mono);font-size:11px;padding-top:2px}
+.log-item .lm{color:var(--muted);overflow-wrap:anywhere}
+.log-item.plan .lm{color:var(--accent)}
+.log-item.review .lm{color:var(--blue)}
+.log-item.feedback .lm{color:var(--green)}
+.log-item.error .lm{color:var(--red)}
+.log-item.note .lm{color:var(--yellow)}
+.score-line{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.score-pill{background:var(--panel3);border:1px solid var(--border2);border-radius:99px;padding:3px 10px;font-size:12px;color:var(--muted)}
+.score-pill b{color:var(--text)}
+.issue{border:1px solid var(--border);border-radius:var(--radius-s);padding:10px 13px;margin-top:8px;background:var(--panel2)}
+.issue .sev{font-size:11px;padding:1px 8px;border-radius:99px;margin-right:8px}
+.sev.error{background:#2a1414;color:var(--red);border:1px solid #4a2626}
+.sev.warning{background:#241f10;color:var(--yellow);border:1px solid #4a4023}
+.sev.info{background:#131c26;color:var(--blue);border:1px solid #24344a}
+.issue .idim{color:var(--accent);font-size:12px;margin-left:6px}
+.issue .isug{color:var(--dim);font-size:12.5px;margin-top:3px;padding-left:4px}
+.plan-block{white-space:pre-wrap;color:#ddd6ea;font-size:13.5px;line-height:1.9}
+.plan-ch{margin:8px 0;padding:10px 14px;background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-s);font-size:13px}
+.plan-ch .pc-title{font-weight:700;color:var(--text)}
+.plan-ch .pc-goal{color:var(--muted)}
+.plan-ch .pc-beat{color:var(--dim);font-size:12px}
+.kb-toolbar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.kb-toolbar .spacer{flex:1}
+.kb-entry{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-s);padding:13px 16px;margin-bottom:10px}
+.kb-entry .ke-main{flex:1;min-width:0}
+.kb-entry .ke-name{font-weight:700;font-size:14.5px}
+.kb-entry .ke-desc{color:var(--muted);font-size:12.5px;margin-top:2px;overflow-wrap:anywhere}
+.kb-entry .ke-rules{color:var(--dim);font-size:12px;margin-top:4px}
+.kb-entry .ke-actions{display:flex;gap:6px;flex:none}
+.form-card{background:var(--panel);border:1px solid var(--accent-line);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px}
+.form-card .fc-title{font-size:15px;font-weight:700;color:var(--accent);margin-bottom:14px}
+.fact-cand{display:flex;gap:8px;align-items:flex-start;background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-s);padding:8px 11px;margin-top:6px;font-size:13px}
+.fact-cand input{margin-top:4px;width:auto;accent-color:var(--accent)}
+.prov-card{display:flex;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:10px;cursor:pointer}
+.prov-card.active{border-color:var(--accent-line);background:var(--panel2)}
+.prov-card .pc-radio{width:auto;accent-color:var(--accent)}
+.prov-card .pc-name{font-weight:700}
+.prov-card .pc-sub{color:var(--dim);font-size:12px}
+.badge-ok{color:var(--green)}
+.markdown-view{white-space:pre-wrap;font-size:14px;color:#e3ddec;line-height:2}
+.guide h2{font-size:19px;margin:26px 0 10px;color:var(--text)}
+.guide h2:first-child{margin-top:0}
+.guide p,.guide li{color:var(--muted);font-size:14px;margin-bottom:8px}
+.guide ul{padding-left:22px}
+.guide code{background:var(--panel2);border:1px solid var(--border);border-radius:5px;padding:1px 7px;font-family:var(--mono);font-size:12.5px;color:var(--accent)}
+.divider{height:1px;background:var(--border);margin:16px 0}
+</style>
+</head><body>
+<div id='app'>
+  <aside id='sidebar'>
+    <div class='logo'><div class='logo-mark'>🖋</div><div><div class='logo-name'>羽笔 Federstift</div><div class='logo-sub' id='logo-ver'>AI 小说创作台</div></div></div>
+    <div class='nav-item' data-nav='works'><span class='ico'>📚</span>我的作品</div>
+    <div class='nav-item' data-nav='new'><span class='ico'>✍</span>开始创作</div>
+    <div class='nav-item' data-nav='kb'><span class='ico'>🗂</span>知识库</div>
+    <div class='nav-item' data-nav='settings'><span class='ico'>⚙</span>模型与设置</div>
+    <div class='nav-item' data-nav='guide'><span class='ico'>📖</span>使用说明</div>
+    <div class='spacer'></div>
+    <div id='side-status'>载入中…</div>
+  </aside>
+  <main id='main'></main>
+</div>
+<div id='toast'></div>
+<div id='overlay' class='hidden'><div class='spin'></div><div class='ov-text' id='ov-text'>处理中…</div></div>
+<script>
+'use strict';
+/* ================= 工具 ================= */
+const $ = (sel, root) => (root || document).querySelector(sel);
+const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+function esc(s){return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmtTime(iso){if(!iso)return '';const d=new Date(iso);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}
+async function api(path, opts){
+  opts = opts || {};
+  const init = {method: opts.method || 'GET', headers: {'Content-Type':'application/json'}};
+  if (opts.body !== undefined) init.body = JSON.stringify(opts.body);
+  const res = await fetch(path, init);
+  let data = {};
+  try { data = await res.json(); } catch(e) {}
+  if (!res.ok) throw new Error(data.error || ('请求失败 (' + res.status + ')'));
+  return data;
+}
+function toast(msg, kind){
+  const box = $('#toast');
+  const el = document.createElement('div');
+  el.className = 'toast-item ' + (kind || '');
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 320); }, 3600);
+}
+function overlay(text){
+  const o = $('#overlay');
+  if (text) { $('#ov-text').textContent = text; o.classList.remove('hidden'); }
+  else o.classList.add('hidden');
+}
+function busy(fn, msg){ return async function(...args){ overlay(msg || '处理中…'); try { return await fn.apply(this, args); } catch(e) { toast(e.message, 'err'); } finally { overlay(null); } }; }
+/* ================= 全局状态 ================= */
+const G = { state:null, snapshot:null, sessionTab:'text', kbTab:'styles', cands:[], editId:null };
+let autoStreamNext = false; // 本次 paint 后自动开始流式创作
+let streaming = false;      // 是否正在流式推进
+let streamAbort = null;
+let liveState = { phase:'', chapter:0, segOrder:0, text:'', done:[], logs:[], pendingText:'', pendingLogs:[] };
+let liveRaf = 0;   // 正文渲染 rAF 句柄（批量 flush，避免每个 delta 强制重排）
+let liveLogRaf = 0; // 日志渲染 rAF 句柄
+const MODE_LABEL = { auto:'自动（安静流淌）', segment:'逐段确认', chapter:'逐章确认' };
+const STRNESS = { strict:'严格', standard:'标准', lenient:'宽松' };
+async function refreshState(){ G.state = await api('/api/state'); }
+function updateSidebar(){
+  const s = G.state;
+  if (!s) return;
+  const prov = s.config.providers.find(p => p.id === s.config.activeProviderId);
+  const demo = s.config.activeProviderId === 'demo' || !(prov && prov.hasKey);
+  $('#logo-ver').textContent = 'v0.10.0 · 羽笔 Federstift';
+  $('#side-status').innerHTML =
+    '<b>模型：</b>' + esc(prov ? prov.name.replace('（无需密钥）','') : '未配置') + (demo ? ' <span class="chip yellow">演示模式</span>' : ' <span class="chip green">已连接</span>') +
+    '<br><b>审批：</b>' + esc(MODE_LABEL[s.config.approvalMode] || s.config.approvalMode) +
+    '<br><b>知识库：</b>风格 ' + s.kb.styles + ' · 设定 ' + s.kb.settings + ' · 模板 ' + s.kb.templates +
+    (s.feedbackPending ? '<br><span class="chip yellow">待学习反馈 ' + s.feedbackPending + ' 条</span>' : '') +
+    '<br><span style="font-size:11px">数据保存在本地 workspace/</span>';
+}
+/* ================= 路由 ================= */
+const navMap = { works:'我的作品', new:'开始创作', kb:'知识库', settings:'模型与设置', guide:'使用说明' };
+function navTo(key){ location.hash = '#/' + key; }
+function markNav(key){ $$('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.nav === key)); }
+$$('.nav-item').forEach(n => n.addEventListener('click', () => navTo(n.dataset.nav)));
+window.addEventListener('hashchange', route);
+function route(){
+  const h = location.hash || '#/works';
+  const m = h.match(/^#\/session\/([^\/]+)$/);
+  if (m) { document.body.classList.add('session-mode'); markNav('works'); return renderSession(decodeURIComponent(m[1])); }
+  document.body.classList.remove('session-mode');
+  if (h.startsWith('#/new')) { markNav('new'); return renderNew(); }
+  if (h.startsWith('#/kb')) { markNav('kb'); return renderKb(); }
+  if (h.startsWith('#/settings')) { markNav('settings'); return renderSettings(); }
+  if (h.startsWith('#/guide')) { markNav('guide'); return renderGuide(); }
+  markNav('works'); renderWorks();
+}
+/* ================= 作品列表 ================= */
+async function renderWorks(){
+  const main = $('#main');
+  main.innerHTML = '<div class="page"><div class="page-head"><div><div class="page-title">我的作品</div><div class="page-sub">作品保存在本地，随时可继续写。</div></div><button class="btn primary" id="btn-new">＋ 开始新作品</button></div><div id="works-list"><div class="empty">载入中…</div></div></div>';
+  $('#btn-new').onclick = () => navTo('new');
+  try {
+    await refreshState(); updateSidebar();
+    const list = G.state.novels;
+    const box = $('#works-list');
+    if (!list.length) {
+      box.innerHTML = '<div class="empty"><div class="big">🖋</div>还没有作品。输入一句话即可开始。</div>';
+      return;
+    }
+    box.innerHTML = '<div class="grid">' + list.map(n => {
+      const pct = n.planChapters ? Math.round(n.chapters / n.planChapters * 100) : 0;
+      return '<div class="novel-card"><div class="novel-title">' + esc(n.title) + '</div>' +
+        '<div class="novel-req">' + esc(n.requirement || '（无要求）') + '</div>' +
+        '<div class="meta"><span>📖 <b>' + n.chapters + '</b> 章</span><span>📝 <b>' + n.segments + '</b> 段</span><span>🔍 <b>' + n.reviews + '</b> 次审查</span><span>🕒 ' + fmtTime(n.updatedAt) + '</span></div>' +
+        '<div class="row" style="gap:8px"><div style="flex:1;min-width:120px">' + progressBar(pct) + '</div><button class="btn primary small" data-open="' + n.id + '">继续创作</button><button class="btn danger small" data-del="' + n.id + '" data-title="' + esc(n.title) + '">删除</button></div>' +
+        '</div>';
+    }).join('') + '</div>';
+    $$('[data-open]', box).forEach(b => b.onclick = () => { autoStreamNext = false; location.hash = '#/session/' + encodeURIComponent(b.dataset.open); });
+    $$('[data-del]', box).forEach(b => b.onclick = busy(async () => {
+      if (!confirm('确定删除作品「' + (b.dataset.title || '') + '」吗？作品文件夹将被永久删除，无法恢复。')) return;
+      await api('/api/novel/' + encodeURIComponent(b.dataset.del), { method: 'DELETE' });
+      toast('已删除', 'ok');
+      renderWorks();
+    }));
+  } catch(e) { $('#works-list').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
+}
+function progressBar(pct){
+  const c = Math.min(100, Math.max(0, pct));
+  return '<div style="background:var(--panel3);border:1px solid var(--border);border-radius:99px;height:8px;overflow:hidden"><div style="width:' + c + '%;height:100%;background:linear-gradient(90deg,#b98a44,#d9a962)"></div></div>';
+}
+/* ================= 新建作品 ================= */
+async function renderNew(){
+  const main = $('#main');
+  main.innerHTML = '<div class="page"><div class="page-head"><div><div class="page-title">开始创作</div><div class="page-sub">只填故事要求即可开始，其余可留空。</div></div></div><div id="new-form"><div class="empty">载入中…</div></div></div>';
+  try {
+    await refreshState(); updateSidebar();
+    const [st, se] = await Promise.all([api('/api/kb/styles'), api('/api/kb/settings')]);
+    const styles = st.entries || [], settings = se.entries || [];
+    const cfg = G.state.config;
+    $('#new-form').innerHTML = `<div class="card">
+      <div class="field"><label>作品名</label><input id="nf-title" placeholder="例如：雾都剑歌"></div>
+      <div class="field"><label>故事要求 <span style="color:var(--red)">*</span></label><textarea id="nf-req" rows="4" placeholder="一句话即可，例如：剑客追查师父失踪的真相。"></textarea></div>
+      <div class="row"><div class="field"><label>计划章数</label><input id="nf-target" type="number" min="1" max="50" value="10"></div><div class="field"><label>本次写几章</label><input id="nf-now" type="number" min="1" max="5" value="1"></div></div>
+      <div class="field"><label>审查重点（可选）</label><input id="nf-focus" placeholder="例如：设定一致性、人物动机"></div>
+      <div class="row"><div class="field"><label>审查力度</label><select id="nf-strict">${['standard','strict','lenient'].map(s => `<option value="${s}" ${s === cfg.reviewStrictness ? 'selected' : ''}>${STRNESS[s]}${s==='standard'?'（推荐）':''}</option>`).join('')}</select></div><div class="field"><label>审批模式</label><select id="nf-mode">${['auto','segment','chapter'].map(m => `<option value="${m}" ${m === cfg.approvalMode ? 'selected' : ''}>${MODE_LABEL[m]}</option>`).join('')}</select></div></div>` +
+      (styles.length ? `<div class="field"><label>风格库（可选）</label><div class="check-grid">${styles.map(s => `<label class="check-item"><input type="checkbox" value="${s.id}"><span><div class="ci-name">${esc(s.name)}</div><div class="ci-sub">${esc((s.description || s.rules[0] || '').slice(0,40))}</div></span></label>`).join('')}</div></div>` : '<div class="field"><label>风格库（空）</label><div class="hint">可在「知识库」用范例创建。</div></div>') +
+      (settings.length ? `<div class="field"><label>设定库（可选）</label><div class="check-grid">${settings.map(s => `<label class="check-item"><input type="checkbox" value="${s.id}"><span><div class="ci-name">${esc(s.name)}</div><div class="ci-sub">${esc(s.content.slice(0,34))}</div></span></label>`).join('')}</div></div>` : '<div class="field"><label>设定库（空）</label><div class="hint">可在「知识库」对话式创建。</div></div>') +
+      '<div style="margin-top:8px"><button class="btn primary" id="nf-submit">🚀 开始创作</button></div>' +
+      '</div>';
+    $('#nf-submit').onclick = busy(async () => {
+      const req = $('#nf-req').value.trim();
+      if (!req) { toast('请先写下你想写的故事', 'err'); return; }
+      const styleIds = $$('#new-form input[type=checkbox]').filter(c => c.closest('.check-grid') && c.closest('.field').querySelector('label').textContent.includes('风格库') && c.checked).map(c => c.value);
+      try {
+        const d = await api('/api/novel', { method:'POST', body: {
+          title: $('#nf-title').value.trim() || undefined,
+          requirement: req,
+          planTarget: parseInt($('#nf-target').value,10) || 10,
+          approvalMode: $('#nf-mode').value,
+          reviewFocus: $('#nf-focus').value.trim() || undefined,
+          reviewStrictness: $('#nf-strict').value,
+          styleIds,
+          settingIds: $$('#new-form input[type=checkbox]').filter(c => c.closest('.check-grid') && c.closest('.field').querySelector('label').textContent.includes('设定库') && c.checked).map(c => c.value)
+        } });
+        G.snapshot = d.snapshot;
+        autoStreamNext = true;
+        location.hash = '#/session/' + encodeURIComponent(d.snapshot.novelId);
+      } catch(e) { toast(e.message, 'err'); }
+    });
+  } catch(e) { $('#new-form').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
+}
+/* ================= 流式创作 ================= */
+function setStreamingUI(on){
+  const adv = $('#btn-advance'), m = $('#mode-sel'), st = $('#strict-sel'), stop = $('#btn-stop');
+  if (adv) adv.disabled = on;
+  if (m) m.disabled = on;
+  if (st) st.disabled = on;
+  if (stop) stop.disabled = on;
+}
+function renderLiveWrap(){
+  // 重建 DOM 前先 flush 未决增量，避免 pendingText 残留重复插入
+  flushLiveText();
+  flushLiveLog();
+  const wrap = $('#live-wrap');
+  if (!wrap) return;
+  const active = streaming && liveState.phase;
+  if (!active && !liveState.text && !liveState.logs.length) { wrap.classList.add('hidden'); wrap.innerHTML = ''; return; }
+  wrap.classList.remove('hidden');
+  const chip = liveState.chapter ? '<span class="chip accent">第 ' + liveState.chapter + ' 章 · 第 ' + liveState.segOrder + ' 段</span>' : '';
+  let bodyHtml = '';
+  liveState.done.forEach((txt, i) => { bodyHtml += '<div class="live-seg"><div class="live-seg-head">第 ' + (i + 1) + ' 段</div><div class="live-seg-text">' + esc(txt) + '</div></div>'; });
+  wrap.innerHTML = '<div class="live-head"><span>✍ ' + esc(liveState.phase || '创作中…') + '</span>' + chip + '</div>' +
+    '<div class="live-body">' + bodyHtml + '<div class="live-text" id="live-text"></div></div><div class="live-log" id="live-log"></div>';
+  const lb = $('.live-body', wrap);
+  const lt = $('#live-text');
+  if (liveState.text) { const n = document.createElement('span'); n.textContent = liveState.text; lt.appendChild(n); }
+  const cur = document.createElement('span'); cur.className = 'live-cursor'; lt.appendChild(cur);
+  if (lb) lb.scrollTop = lb.scrollHeight;
+  const lg = $('#live-log');
+  liveState.logs.forEach(l => { const d = document.createElement('div'); d.className = 'll ' + (l.kind || ''); d.textContent = l.text; lg.appendChild(d); });
+  if (lg.children.length) lg.scrollTop = lg.scrollHeight;
+}
+function showLive(phase){
+  streaming = true;
+  liveState.phase = phase || '正在创作…';
+  setStreamingUI(true);
+  if (G.sessionTab !== 'text') { G.sessionTab = 'text'; renderSessionTab(); return; }
+  renderLiveWrap();
+}
+function flushLiveText(){
+  liveRaf = 0;
+  const lt = $('#live-text');
+  if (!lt || !liveState.pendingText) return;
+  const n = document.createElement('span');
+  n.textContent = liveState.pendingText;
+  liveState.pendingText = '';
+  lt.insertBefore(n, lt.lastElementChild);
+  lt.scrollTop = lt.scrollHeight; // 每帧最多一次强制重排
+}
+function flushLiveLog(){
+  liveLogRaf = 0;
+  const lg = $('#live-log');
+  if (!lg || !liveState.pendingLogs.length) return;
+  const frag = document.createDocumentFragment();
+  for (const l of liveState.pendingLogs) {
+    const d = document.createElement('div');
+    d.className = 'll ' + (l.kind || '');
+    d.textContent = l.text;
+    frag.appendChild(d);
+  }
+  liveState.pendingLogs = [];
+  lg.appendChild(frag);
+  lg.scrollTop = lg.scrollHeight;
+}
+function appendLiveText(delta){
+  liveState.text += delta;
+  liveState.pendingText += delta;
+  if (!liveRaf) liveRaf = requestAnimationFrame(flushLiveText);
+}
+function pushLiveLog(text, kind){
+  liveState.logs.push({ text: text, kind: kind || '' });
+  liveState.pendingLogs.push({ text: text, kind: kind || '' });
+  if (!liveLogRaf) liveLogRaf = requestAnimationFrame(flushLiveLog);
+}
+function hideLive(){
+  if (liveRaf) { cancelAnimationFrame(liveRaf); liveRaf = 0; }
+  if (liveLogRaf) { cancelAnimationFrame(liveLogRaf); liveLogRaf = 0; }
+  streaming = false;
+  streamAbort = null;
+  liveState = { phase:'', chapter:0, segOrder:0, text:'', done:[], logs:[], pendingText:'', pendingLogs:[] };
+  const wrap = $('#live-wrap');
+  if (wrap) { wrap.classList.add('hidden'); wrap.innerHTML = ''; }
+  setStreamingUI(false);
+}
+function maybeAutoStart(){
+  if (streaming) return;
+  const s = G.snapshot;
+  if (!s || !s.novelId || sessionId !== s.novelId) return;
+  if (s.status === 'finished') return; // stopped 可继续（服务端 advance 会重置为 writing）
+  if (s.pending) return;
+  startStream();
+}
+function handleStreamEvent(raw){
+  let ev = 'message', data = '';
+  const lines = raw.split('\n');
+  for (const l of lines) {
+    if (l.startsWith('event:')) ev = l.slice(6).trim();
+    else if (l.startsWith('data:')) data += l.slice(5).trim();
+  }
+  if (!data) return;
+  let obj;
+  try { obj = JSON.parse(data); } catch(e) { return; }
+  if (ev === 'segment') { flushLiveText(); if (liveState.text) liveState.done.push(liveState.text); liveState.chapter = obj.chapter; liveState.segOrder = obj.segOrder; liveState.phase = '正在创作'; liveState.text = ''; renderLiveWrap(); }
+  else if (ev === 'text') appendLiveText(obj.delta);
+  else if (ev === 'log') pushLiveLog(obj.text, obj.text.indexOf('总规划') === 0 ? 'plan' : '');
+  else if (ev === 'review') pushLiveLog(obj.text, 'review');
+  else if (ev === 'error') toast(obj.error || '创作失败，请重试', 'err');
+}
+async function startStream(){
+  if (streaming || !sessionId) return;
+  showLive('准备中…');
+  const ac = new AbortController();
+  streamAbort = ac;
+  try {
+    const resp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/stream', { method:'POST', signal: ac.signal });
+    if (!resp.ok || !resp.body) {
+      let msg = '无法开始创作';
+      try { const d = await resp.json(); if (d && d.error) msg = d.error; } catch(e) {}
+      throw new Error(msg);
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream:true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) >= 0) {
+        const raw = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        handleStreamEvent(raw);
+      }
+    }
+  } catch(e) {
+    if (e && e.name !== 'AbortError') toast(e.message, 'err');
+  } finally {
+    hideLive();
+    if (location.hash === '#/session/' + encodeURIComponent(sessionId)) await reloadSession();
+  }
+}
+async function reloadSession(){
+  try {
+    const d = await api('/api/session/' + encodeURIComponent(sessionId));
+    G.snapshot = d.snapshot;
+    paintSession();
+  } catch(e) { /* 保持当前画面 */ }
+}
+/* ================= 创作会话 ================= */
+let sessionId = null;
+const STATUS_LABEL = { writing:'创作中', questions:'待回答问题', segment:'逐段审批', chapter:'待章节确认', review:'待处理审查', chapter_done:'本章完成', finished:'已全部完成', stopped:'已停止' };
+async function renderSession(id){
+  sessionId = id;
+  overlay('载入作品…');
+  try {
+    const d = await api('/api/session/' + encodeURIComponent(sessionId));
+    G.snapshot = d.snapshot;
+    paintSession();
+  } catch(e){ $('#main').innerHTML = '<div class="page"><div class="empty">' + esc(e.message) + '</div><button class="btn ghost" onclick="location.hash=\'#/works\'">← 返回作品列表</button></div>'; }
+  finally { overlay(null); }
+}
+function paintSession(){
+  const s = G.snapshot;
+  if (!s) return;
+  const st = s.status;
+  const statusChip = st === 'finished' ? '<span class="chip green">' + STATUS_LABEL[st] + '</span>' : st === 'stopped' ? '<span class="chip">' + STATUS_LABEL[st] + '</span>' : '<span class="chip accent">' + STATUS_LABEL[st] + '</span>';
+  const demo = s.provider.isDemo ? '<span class="chip yellow">演示模式</span>' : '<span class="chip green">' + esc(s.provider.name) + '</span>';
+  $('#main').innerHTML = `<div class="page" style="max-width:1180px">` +
+    `<div style="margin-bottom:6px"><a href="#/works" style="font-size:13px">← 我的作品</a></div>` +
+    `<div class="sess-head"><div><div class="sess-title">${esc(s.title)}</div><div class="sess-meta" style="margin-top:6px">${statusChip} ${demo}<span class="chip">${esc(MODE_LABEL[s.approvalMode] || s.approvalMode)}</span><span class="chip">${s.plan ? '第 ' + s.chapters.length + ' / ' + s.plan.chapters.length + ' 章' : '规划中…'}</span></div></div>` +
+    `<div class="sess-controls"><label style="font-size:12px;color:var(--muted)">审批模式</label><select id="mode-sel">${['auto','segment','chapter'].map(m => `<option value="${m}" ${m===s.approvalMode?'selected':''}>${MODE_LABEL[m]}</option>`).join('')}</select><label style="font-size:12px;color:var(--muted)">审查力度</label><select id="strict-sel">${['standard','strict','lenient'].map(x => `<option value="${x}" ${x===s.strictness?'selected':''}>${STRNESS[x]}</option>`).join('')}</select>` +
+    `<button class="btn primary" id="btn-advance">▶ 继续创作</button><button class="btn danger" id="btn-stop">⏹ 停止</button></div></div>` +
+    (s.pending ? pendingPanel(s.pending) : '') +
+    `<div class="tabs">${[['text','正文'],['plan','创作计划'],['reviews','审查记录'],['notes','作者答复'],['log','活动日志']].map(t => `<div class="tab ${G.sessionTab===t[0]?'active':''}" data-tab="${t[0]}">${t[1]}</div>`).join('')}</div>` +
+    `<div id="sess-content"></div></div>`;
+  $('#mode-sel').onchange = busy(async e => {
+    const d = await api('/api/session/' + encodeURIComponent(sessionId) + '/mode', { method:'POST', body:{ mode: e.target.value } });
+    G.snapshot = d.snapshot; autoStreamNext = true; paintSession(); toast('审批模式已切换', 'ok');
+  }, '切换审批模式…');
+  $('#strict-sel').onchange = busy(async e => {
+    const d = await api('/api/session/' + encodeURIComponent(sessionId) + '/strictness', { method:'POST', body:{ strictness: e.target.value } });
+    G.snapshot = d.snapshot; paintSession(); toast('审查力度已更新，下次审查生效', 'ok');
+  });
+  $('#btn-advance').onclick = () => maybeAutoStart();
+  $('#btn-stop').onclick = busy(async () => {
+    const d = await api('/api/session/' + encodeURIComponent(sessionId) + '/stop', { method:'POST' });
+    G.snapshot = d.snapshot; paintSession(); toast('已停止，作品已保存', 'ok');
+  });
+  $$('.tab').forEach(t => t.onclick = () => { G.sessionTab = t.dataset.tab; paintSession(); });
+  renderSessionTab();
+  bindPending();
+  setStreamingUI(streaming);
+  if (s.status === 'finished') { $('#btn-advance').disabled = true; $('#btn-stop').disabled = true; }
+  if (s.status === 'stopped') { $('#btn-stop').disabled = true; }
+  if (s.pending && s.pending.kind === 'chapter_done') $('#btn-advance').disabled = true;
+  if (autoStreamNext) { autoStreamNext = false; maybeAutoStart(); }
+}
+function pendingPanel(p){
+  if (p.kind === 'questions') {
+    return `<div class="pending"><div class="pending-title">💬 总规划 Agent 想先确认 ${p.questions.length} 个问题 <span class="chip accent">可全部跳过</span></div>` +
+      p.questions.map((q,i) => `<div class="q-item"><label><b>${i+1}. ${esc(q)}</b>（可留空跳过）</label><input class="q-input" data-q="${esc(q)}" placeholder="你的回答…"></div>`).join('') +
+      `<div class="pending-actions"><button class="btn primary" id="q-submit">提交（视为设定）</button><button class="btn ghost" id="q-skip">全部跳过</button></div></div>`;
+  }
+  if (p.kind === 'segment') {
+    return `<div class="pending"><div class="pending-title">✍ 第 ${p.chapter} 章 · 第 ${p.segOrder} 段 <span class="chip accent">逐段审批</span></div>` +
+      `<div class="text-view">${esc(p.text)}</div>` +
+      `<div class="pending-actions"><button class="btn primary" id="seg-approve">✔ 批准，继续</button><button class="btn" id="seg-edit">✎ 修改这段</button><button class="btn" id="seg-redo">↻ 重写这段</button><button class="btn" id="seg-back">⏪ 打回上一段</button><button class="btn danger" id="seg-stop">⏹ 停止</button></div>` +
+      `<div id="seg-edit-box" style="display:none;margin-top:12px"><textarea id="seg-edit-ta" rows="8">${esc(p.text)}</textarea><div class="pending-actions"><button class="btn primary" id="seg-edit-ok">保存修改（会记录反馈）</button><button class="btn ghost" id="seg-edit-cancel">取消</button></div></div></div>`;
+  }
+  if (p.kind === 'chapter') {
+    return `<div class="pending"><div class="pending-title">📖 第 ${p.chapter} 章「${esc(p.title)}」整章确认 <span class="chip accent">逐章审批</span></div>` +
+      `<div class="text-view">${esc(p.text)}</div>` +
+      `<div class="pending-actions"><button class="btn primary" id="ch-approve">✔ 批准这一章</button><button class="btn" id="ch-redo">↻ 整章重写</button><button class="btn danger" id="ch-stop">⏹ 停止</button></div></div>`;
+  }
+  if (p.kind === 'review') {
+    const r = p.report;
+    const kindLabel = p.reviewKind === 'macro' ? '宏观一致性检查' : '章节审查';
+    return `<div class="pending"><div class="pending-title">🔍 ${kindLabel} · 第 ${p.chapter} 章 <span class="chip ${r.passed?'green':'yellow'}">${r.passed?'通过':'未通过'}</span></div>` +
+      `<div class="score-line">${Object.entries({overall:'总分',plot:'情节',character:'人物',settingConsistency:'设定一致',style:'文风',logic:'逻辑',language:'语言',pacing:'节奏'}).map(([k,l]) => `<span class="score-pill">${l} <b>${r.score[k]}</b></span>`).join('')}</div>` +
+      (r.issues.length ? `<div style="margin-top:8px">${r.issues.map(i => `<div class="issue"><span class="sev ${i.severity}">${i.severity}</span><span>${esc(i.description)}</span><span class="idim">[${dimLabel(i.dimension)}]</span>${i.suggestion ? `<div class="isug">建议：${esc(i.suggestion)}</div>` : ''}</div>`).join('')}</div>` : '') +
+      (r.strengths.length ? `<div style="margin-top:10px;font-size:13px;color:var(--green)">👍 ${r.strengths.map(esc).join('；')}</div>` : '') +
+      (r.suggestions.length ? `<div style="margin-top:8px;font-size:13px;color:var(--muted)">整体建议：${r.suggestions.map(esc).join('；')}</div>` : '') +
+      `<div class="pending-actions"><button class="btn primary" id="rev-redo">↻ 重写本章（落实意见）</button><button class="btn" id="rev-ignore">✔ 忽略，继续创作</button><select id="rev-strict" style="width:auto">${['standard','strict','lenient'].map(x => `<option value="${x}" ${x===G.snapshot.strictness?'selected':''}>${STRNESS[x]}</option>`).join('')}</select><button class="btn ghost" id="rev-strict-ok">调整下次力度</button></div></div>`;
+  }
+  if (p.kind === 'chapter_done') {
+    return `<div class="pending"><div class="pending-title">✅ 第 ${p.chapter} 章完成</div><div class="plan-block" style="color:var(--muted)">本章已完成并保存。</div>` +
+      `<div class="pending-actions"><button class="btn primary" id="cd-continue">继续写下一章</button><button class="btn danger" id="cd-stop">停止本轮创作</button></div></div>`;
+  }
+  return '';
+}
+function dimLabel(d){ return ({plot:'情节',character:'人物',settingConsistency:'设定一致',style:'文风',logic:'逻辑',language:'语言',pacing:'节奏',other:'其他'}[d] || d); }
+function renderSessionTab(){
+  const s = G.snapshot;
+  const box = $('#sess-content');
+  if (G.sessionTab === 'text') {
+    const chaptersHtml = s.chapters.length ? s.chapters.map(ch => {
+      const edited = ch.segments.filter(x => x.userEdited).length;
+      return `<div class="ch-head"><span>📖 第 ${ch.order} 章 · ${esc(ch.title)}</span>${edited ? `<span class="chip blue">✎ 你改过 ${edited} 段</span>` : ''}</div>` +
+        ch.segments.map(seg => `<div class="seg"><div class="seg-head"><span>第 ${seg.order} 段</span>${seg.userEdited ? '<span class="chip blue" style="padding:0 7px">已修改</span>' : ''}</div><div class="seg-text">${esc(seg.text)}</div></div>`).join('') ;
+    }).join('') : '<div class="empty"><div class="big">📖</div>还没有正文。点击「▶ 继续创作」开始写作。</div>';
+    box.innerHTML = '<div id="live-wrap" class="live-area hidden"></div>' + chaptersHtml;
+    renderLiveWrap();
+    return;
+  }
+  if (G.sessionTab === 'plan') {
+    const p = s.plan;
+    if (!p) { box.innerHTML = '<div class="empty">尚无创作计划。</div>'; return; }
+    box.innerHTML = `<div class="panel-box"><h3>总规划 Agent 的理解</h3><div class="plan-block">${esc(p.premise)}</div></div>` +
+      `<div class="panel-box"><h3>全局策略</h3><div class="plan-block">${esc(p.strategy)}</div></div>` +
+      (p.styleDirectives.length ? `<div class="panel-box"><h3>风格把控</h3>${p.styleDirectives.map(d => `<div style="font-size:13px;color:var(--muted);padding:3px 0">· ${esc(d)}</div>`).join('')}</div>` : '') +
+      `<div class="panel-box"><h3>审查时机</h3><div class="plan-block">${esc(p.reviewSchedule)}</div></div>` +
+      `<div class="panel-box"><h3>章节计划（共 ${p.chapters.length} 章）</h3>` + p.chapters.map(c => `<div class="plan-ch"><div class="pc-title">第 ${c.order} 章「${esc(c.title)}」${c.reviewAfter ? '<span class="chip yellow" style="margin-left:6px">章末审查</span>' : ''}</div><div class="pc-goal">目标：${esc(c.goal)}</div>${c.beats.length ? `<div class="pc-beat">节拍：${c.beats.map(esc).join(' → ')}</div>` : ''}${c.questions.length ? `<div class="pc-beat">待确认：${c.questions.map(esc).join(' / ')}</div>` : ''}</div>`).join('') + '</div>';
+    return;
+  }
+  if (G.sessionTab === 'reviews') {
+    if (!s.reviews.length) { box.innerHTML = '<div class="empty">还没有审查记录。</div>'; return; }
+    box.innerHTML = s.reviews.slice().reverse().map(r => {
+      const kindLabel = r.kind === 'macro' ? '宏观一致性检查' : '章节审查';
+      return `<div class="panel-box"><h3><span>${kindLabel} · 第 ${r.chapter} 章</span><span class="chip ${r.passed?'green':'yellow'}">${r.passed?'通过':'未通过'}</span></h3><div class="score-line">${Object.entries({overall:'总分',plot:'情节',character:'人物',settingConsistency:'设定一致',style:'文风',logic:'逻辑',language:'语言',pacing:'节奏'}).map(([k,l]) => `<span class="score-pill">${l} <b>${r.score[k]}</b></span>`).join('')}</div><div style="font-size:11.5px;color:var(--dim)">${fmtTime(r.ts)}</div>` +
+      (r.issues.length ? r.issues.map(i => `<div class="issue"><span class="sev ${i.severity}">${i.severity}</span><span>${esc(i.description)}</span><span class="idim">[${dimLabel(i.dimension)}]</span>${i.suggestion ? `<div class="isug">建议：${esc(i.suggestion)}</div>` : ''}</div>`).join('') : '') +
+      (r.strengths.length ? `<div style="margin-top:8px;font-size:12.5px;color:var(--green)">👍 ${r.strengths.map(esc).join('；')}</div>` : '') +
+      (r.suggestions.length ? `<div style="margin-top:6px;font-size:12.5px;color:var(--muted)">建议：${r.suggestions.map(esc).join('；')}</div>` : '') + '</div>';
+    }).join('');
+    return;
+  }
+  if (G.sessionTab === 'notes') {
+    if (!s.authorNotes.length) { box.innerHTML = '<div class="empty">还没有作者答复。</div>'; return; }
+    box.innerHTML = s.authorNotes.map(n => `<div class="seg"><div class="seg-head"><span>${n.chapter === 0 ? '开局前' : '第 ' + n.chapter + ' 章'}</span><span style="color:var(--dim)">${fmtTime(n.ts)}</span></div><div class="seg-text" style="font-size:13px"><span style="color:var(--accent)">问：${esc(n.question)}</span><br>答：${esc(n.answer)}</div></div>`).join('');
+    return;
+  }
+  /* log */
+  const log = s.log.slice().reverse();
+  if (!log.length) { box.innerHTML = '<div class="empty">暂无活动。</div>'; return; }
+  box.innerHTML = `<div class="panel-box"><h3><span>活动日志</span><span class="chip">${s.log.length} 条</span></h3>` + log.map(l => `<div class="log-item ${l.type}"><span class="lt">${fmtTime(l.ts).slice(5)}</span><span class="lm">${esc(l.text)}</span></div>`).join('') + '</div>';
+}
+/* 待决面板事件绑定（paintSession 之后调用） */
+function bindPending(){
+  const s = G.snapshot;
+  const p = s && s.pending;
+  if (!p) return;
+  const dec = (forKind, action, extra, msg) => busy(async () => {
+    const resolved = {};
+    for (const k in (extra || {})) resolved[k] = typeof extra[k] === 'function' ? extra[k]() : extra[k];
+    const body = { for: forKind, action: action, ...resolved };
+    const d = await api('/api/session/' + encodeURIComponent(sessionId) + '/decide', { method:'POST', body });
+    G.snapshot = d.snapshot; autoStreamNext = true; paintSession();
+  }, msg || '处理中…');
+  if (p.kind === 'questions') {
+    const collect = () => $$('.q-input').map(i => ({ question: i.dataset.q, answer: i.value.trim() }));
+    const submit = busy(async () => { const d = await api('/api/session/' + encodeURIComponent(sessionId) + '/answer', { method:'POST', body:{ answers: collect() } }); G.snapshot = d.snapshot; autoStreamNext = true; paintSession(); }, '保存答复…');
+    $('#q-submit').onclick = submit;
+    $('#q-skip').onclick = submit;
+    return;
+  }
+  if (p.kind === 'segment') {
+    $('#seg-approve').onclick = dec('segment','approve');
+    $('#seg-edit').onclick = () => { const b = $('#seg-edit-box'); b.style.display = b.style.display === 'none' ? 'block' : 'none'; };
+    $('#seg-edit-cancel').onclick = () => { $('#seg-edit-box').style.display = 'none'; };
+    $('#seg-edit-ok').onclick = dec('segment','edit',{ editedText: () => $('#seg-edit-ta').value });
+    $('#seg-redo').onclick = dec('segment','redo',null,'重写中…');
+    $('#seg-back').onclick = dec('segment','back');
+    $('#seg-stop').onclick = dec('segment','stop');
+    return;
+  }
+  if (p.kind === 'chapter') {
+    $('#ch-approve').onclick = dec('chapter','approve');
+    $('#ch-redo').onclick = dec('chapter','redo',null,'整章重写中…');
+    $('#ch-stop').onclick = dec('chapter','stop');
+    return;
+  }
+  if (p.kind === 'review') {
+    $('#rev-redo').onclick = dec('review','redo',null,'重写本章…');
+    $('#rev-ignore').onclick = dec('review','ignore');
+    $('#rev-strict-ok').onclick = dec('review','strictness',{ strictness: () => $('#rev-strict').value });
+    return;
+  }
+  if (p.kind === 'chapter_done') {
+    $('#cd-continue').onclick = dec('chapter_done','continue',null,'创作中…');
+    $('#cd-stop').onclick = dec('chapter_done','stop');
+  }
+}
+/* ================= 知识库 ================= */
+async function renderKb(){
+  await refreshState(); updateSidebar();
+  $('#main').innerHTML = `<div class="page"><div class="page-head"><div><div class="page-title">知识库</div><div class="page-sub">风格、设定与模板会自动用于创作与审查，全部保存在本地。</div></div></div>` +
+    `<div class="tabs">${[['styles','风格库'],['settings','设定库'],['templates','模板库'],['feedback','反馈学习']].map(t => `<div class="tab ${G.kbTab===t[0]?'active':''}" data-kbtab="${t[0]}">${t[1]}</div>`).join('')}</div>` +
+    `<div id="kb-content"></div></div>`;
+  $$('[data-kbtab]').forEach(t => t.onclick = () => { G.kbTab = t.dataset.kbtab; renderKb(); });
+  const t = G.kbTab;
+  if (t === 'styles') await renderStylesTab();
+  else if (t === 'settings') await renderKbSettingsTab();
+  else if (t === 'templates') await renderTemplatesTab();
+  else renderFeedbackTab();
+}
+async function loadKb(kind){ const d = await api('/api/kb/' + kind); return d.entries || []; }
+/* ---- 风格库 ---- */
+let styleEditId = null;
+async function renderStylesTab(){
+  const box = $('#kb-content');
+  const entries = await loadKb('styles');
+  box.innerHTML = `<div class="form-card" id="style-form"><div class="fc-title">${styleEditId ? '编辑风格' : '创建风格（范例式 · 粘贴你喜欢的段落）'}</div>` +
+    `<div class="field"><label>风格名</label><input id="st-name" placeholder="例如：冷峻悬疑风"></div>` +
+    `<div class="field"><label>范例文本（粘贴你喜欢的段落，自动提炼规则）</label><textarea id="st-example" rows="5" placeholder="把喜欢的一段文字粘进来…"></textarea></div>` +
+    `<div class="field"><label>风格规则（一行一条，可手动修改）</label><textarea id="st-rules" rows="4" placeholder="句子短促有力&#10;使用第三人称叙述"></textarea></div>` +
+    `<div class="field"><label>一句话描述</label><input id="st-desc"></div>` +
+    `<div class="field"><label>标签（逗号分隔）</label><input id="st-tags" placeholder="悬疑、第一人称"></div>` +
+    `<div class="row" style="gap:8px"><button class="btn primary" id="st-save">${styleEditId ? '保存修改' : '提炼并保存'}</button><button class="btn ghost" id="st-cancel" style="display:${styleEditId?'':'none'}">取消编辑</button><label class="chip" style="cursor:pointer;margin-left:auto"><input type="checkbox" id="st-ai" checked> 用 AI 精修（有真实模型时）</label></div></div>` +
+    `<div style="margin-top:6px">` + (entries.length ? entries.map(e => entryRow(e, 'styles', e.rules.slice(0,2).map(r => '· ' + r).join('<br>'), e.description)).join('') : '<div class="empty">风格库还是空的。粘贴一段你喜欢的文字，提炼成可复用风格。</div>') + '</div>';
+  $('#st-save').onclick = busy(async () => {
+    const name = $('#st-name').value.trim();
+    const example = $('#st-example').value.trim();
+    const rules = $('#st-rules').value.split(/\n/).map(x => x.trim()).filter(Boolean);
+    const tags = $('#st-tags').value.split(/[,，]/).map(x => x.trim()).filter(Boolean);
+    const desc = $('#st-desc').value.trim();
+    if (!name) { toast('请给风格起个名字', 'err'); return; }
+    if (styleEditId) {
+      await api('/api/kb/styles', { method:'POST', body:{ id: styleEditId, name, description: desc, rules, tags, exampleText: example } });
+      styleEditId = null; toast('风格已更新', 'ok');
+    } else {
+      if (!example && !rules.length) { toast('请粘贴范例文本，或手动填写规则', 'err'); return; }
+      if (example) {
+        const d = await api('/api/kb/styles/from-example', { method:'POST', body:{ name, exampleText: example, description: desc, tags, useAi: $('#st-ai').checked } });
+        toast('已提炼 ' + d.style.rules.length + ' 条规则并保存' + (d.aiUsed ? '（含 AI 精修）' : ''), 'ok');
+      } else {
+        await api('/api/kb/styles', { method:'POST', body:{ name, description: desc, rules, tags } });
+        toast('风格已保存', 'ok');
+      }
+    }
+    renderKb();
+  }, '提炼中…');
+  $('#st-cancel').onclick = () => { styleEditId = null; renderKb(); };
+  $$('[data-edit]', box).forEach(b => b.onclick = () => {
+    const id = b.dataset.edit; const e = entries.find(x => x.id === id); if (!e) return;
+    styleEditId = id; renderStylesTab();
+    $('#st-name').value = e.name; $('#st-desc').value = e.description || '';
+    $('#st-rules').value = (e.rules || []).join('\n'); $('#st-tags').value = (e.tags || []).join('，');
+    $('#st-example').value = e.exampleText || '';
+  });
+  $$('[data-del]', box).forEach(b => b.onclick = busy(async () => {
+    if (!confirm('确定删除这个风格吗？')) return;
+    await api('/api/kb/styles/' + b.dataset.del, { method:'DELETE' }); toast('已删除', 'ok'); renderKb();
+  }));
+}
+function entryRow(e, kind, sub, desc){
+  return `<div class="kb-entry"><div class="ke-main"><div class="ke-name">${esc(e.name)} ${kind==='settings' ? `<span class="chip accent" style="font-size:11px">${esc(e.category || '')}</span>` : ''}</div><div class="ke-desc">${esc(desc || e.content || e.purpose || '')}</div><div class="ke-rules">${sub ? esc(sub) : ''}</div></div><div class="ke-actions"><button class="btn small" data-edit="${e.id}">编辑</button><button class="btn small danger" data-del="${e.id}">删除</button></div></div>`;
+}
+/* ---- 设定库 ---- */
+let settingEditId = null; let factCands = []; let extractCands = [];
+async function renderKbSettingsTab(){
+  const box = $('#kb-content');
+  const entries = await loadKb('settings');
+  box.innerHTML = `<div class="form-card"><div class="fc-title">对话式创建设定 <span class="chip accent">推荐</span></div>` +
+    `<div class="field"><label>这条设定属于哪一类</label><select id="set-cat">${[['character','人物'],['world','世界观/地点'],['plot','剧情/组织'],['item','物品/能力'],['timeline','时间线'],['other','其他']].map(c => `<option value="${c[0]}">${c[1]}</option>`).join('')}</select></div>` +
+    `<div class="field"><label>名字</label><input id="set-name" placeholder="例如：主角阿翎"></div>` +
+    `<div class="field"><label>描述（背景、来历、特点）</label><textarea id="set-content" rows="4" placeholder="阿翎是西城剑士，沉默寡言，用左手剑。"></textarea><div class="hint">保存时会自动拆分硬性事实，供一致性检查优先遵守。</div></div>` +
+    `<div class="field"><label>别名 / 其他叫法（逗号分隔）</label><input id="set-aliases" placeholder="翎、阿翎"></div>` +
+    `<div class="field"><label>标签（逗号分隔）</label><input id="set-tags" placeholder="主线、主角"></div>` +
+    `<div id="set-facts"></div><div style="margin-top:4px"><button class="btn ghost small" id="set-preview">预览硬性事实</button></div>` +
+    `<div class="pending-actions"><button class="btn primary" id="set-save">保存设定</button><button class="btn ghost" id="set-cancel" style="display:none">取消编辑</button></div></div>` +
+    `<div class="form-card"><div class="fc-title">自动提取设定 <span class="chip accent">粘贴一段文字</span></div>` +
+    `<div class="field"><label>粘贴人物介绍 / 世界观 / 时间线等文字</label><textarea id="ext-text" rows="4" placeholder="林默是一名退役军医，性格冷静。他来自北境霜城…"></textarea></div>` +
+    `<div class="pending-actions"><button class="btn" id="ext-go">识别候选</button></div><div id="ext-cands"></div><div class="pending-actions" id="ext-save-wrap" style="display:none"><button class="btn primary" id="ext-save">保存所选设定</button></div></div>` +
+    `<div style="margin-top:6px">` + (entries.length ? entries.map(e => entryRow(e, 'settings', (e.facts||[]).slice(0,2).map(f => '· ' + f).join('<br>'), e.content)).join('') : '<div class="empty">设定库还是空的。用对话式创建，或粘贴一段文字自动提取。</div>') + '</div>';
+  $('#set-preview').onclick = busy(async () => {
+    const content = $('#set-content').value.trim();
+    if (!content) { toast('先写点描述', 'err'); return; }
+    const d = await api('/api/kb/settings/facts', { method:'POST', body:{ content } });
+    factCands = d.candidates;
+    $('#set-facts').innerHTML = `<div style="font-size:12.5px;color:var(--muted);margin:8px 0 4px">检测到以下硬性事实（可取消勾选）：</div>` + factCands.map((f,i) => `<label class="fact-cand"><input type="checkbox" data-fi="${i}" checked><span>${esc(f)}</span></label>`).join('');
+    if (!factCands.length) $('#set-facts').innerHTML = '<div class="hint">没有拆出明显事实，将原样保存描述。</div>';
+  });
+  $('#set-save').onclick = busy(async () => {
+    const name = $('#set-name').value.trim(); const content = $('#set-content').value.trim();
+    if (!name || !content) { toast('名字与描述不能为空', 'err'); return; }
+    const keep = factCands.filter((f,i) => { const cb = $(`[data-fi="${i}"]`); return cb ? cb.checked : false; });
+    const aliases = $('#set-aliases').value.split(/[,，]/).map(x => x.trim()).filter(Boolean);
+    const tags = $('#set-tags').value.split(/[,，]/).map(x => x.trim()).filter(Boolean);
+    if (settingEditId) {
+      await api('/api/kb/settings', { method:'POST', body:{ id: settingEditId, name, category: $('#set-cat').value, content, facts: keep, aliases, tags } });
+      settingEditId = null; toast('设定已更新', 'ok');
+    } else {
+      await api('/api/kb/settings/from-conversation', { method:'POST', body:{ name, category: $('#set-cat').value, content, keepFacts: keep, aliases, tags } });
+      toast('设定已保存', 'ok');
+    }
+    factCands = []; renderKb();
+  });
+  $('#set-cancel').onclick = () => { settingEditId = null; renderKb(); };
+  $('#ext-go').onclick = busy(async () => {
+    const text = $('#ext-text').value.trim();
+    if (!text) { toast('请粘贴文字', 'err'); return; }
+    const d = await api('/api/kb/settings/extract', { method:'POST', body:{ text } });
+    extractCands = d.candidates;
+    $('#ext-cands').innerHTML = `<div style="font-size:12.5px;color:var(--muted);margin:8px 0 4px">识别到 ${extractCands.length} 条候选：</div>` + extractCands.map((c,i) => `<label class="fact-cand"><input type="checkbox" data-ei="${i}" checked><span><b>${esc(c.name)}</b> <span class="chip accent" style="font-size:11px">${esc(c.category)}</span><br>${esc(c.content)}</span></label>`).join('') || '<div class="hint">没有识别出候选。</div>';
+    $('#ext-save-wrap').style.display = extractCands.length ? 'flex' : 'none';
+  });
+  $('#ext-save').onclick = busy(async () => {
+    let n = 0;
+    for (let i = 0; i < extractCands.length; i++) {
+      const cb = $(`[data-ei="${i}"]`); if (!cb || !cb.checked) continue;
+      const c = extractCands[i];
+      await api('/api/kb/settings', { method:'POST', body:{ name: c.name, category: c.category, content: c.content, facts: c.facts, aliases: c.aliases, source: 'extracted' } });
+      n++;
+    }
+    toast('已保存 ' + n + ' 条设定', 'ok'); extractCands = []; renderKb();
+  });
+  $$('[data-edit]', box).forEach(b => b.onclick = () => {
+    const e = entries.find(x => x.id === b.dataset.edit); if (!e) return;
+    settingEditId = e.id; renderKbSettingsTab();
+    $('#set-name').value = e.name; $('#set-content').value = e.content;
+    $('#set-cat').value = e.category || 'other'; $('#set-aliases').value = (e.aliases||[]).join('，');
+    $('#set-tags').value = (e.tags||[]).join('，');
+    factCands = e.facts || [];
+    $('#set-facts').innerHTML = `<div style="font-size:12.5px;color:var(--muted);margin:8px 0 4px">硬性事实：</div>` + factCands.map((f,i) => `<label class="fact-cand"><input type="checkbox" data-fi="${i}" checked><span>${esc(f)}</span></label>`).join('');
+    $('#set-cancel').style.display = '';
+  });
+  $$('[data-del]', box).forEach(b => b.onclick = busy(async () => {
+    if (!confirm('确定删除这条设定吗？')) return;
+    await api('/api/kb/settings/' + b.dataset.del, { method:'DELETE' }); toast('已删除', 'ok'); renderKb();
+  }));
+}
+/* ---- 模板库 ---- */
+let tplEditId = null;
+async function renderTemplatesTab(){
+  const box = $('#kb-content');
+  const entries = await loadKb('templates');
+  box.innerHTML = `<div class="form-card"><div class="fc-title">${tplEditId ? '编辑模板' : '创建提问模板'}</div>` +
+    `<div class="field"><label>模板名</label><input id="tp-name" placeholder="例如：人物小传"></div>` +
+    `<div class="field"><label>用途</label><input id="tp-purpose" placeholder="例如：请 AI 帮我梳理一个角色"></div>` +
+    `<div class="field"><label>模板正文（可用 {变量} 占位）</label><textarea id="tp-prompt" rows="4" placeholder="请为 {人物} 写一段小传，包括性格、动机与过往。"></textarea></div>` +
+    `<div class="field"><label>标签（逗号分隔）</label><input id="tp-tags" placeholder="人物、设定"></div>` +
+    `<div class="pending-actions"><button class="btn primary" id="tp-save">${tplEditId ? '保存修改' : '保存模板'}</button><button class="btn ghost" id="tp-cancel" style="display:${tplEditId?'':'none'}">取消编辑</button></div></div>` +
+    `<div style="margin-top:6px">` + (entries.length ? entries.map(e => entryRow(e, 'templates', e.purpose, e.prompt)).join('') : '<div class="empty">模板库还是空的。保存常用的提问模板，之后可直接复用。</div>') + '</div>';
+  $('#tp-save').onclick = busy(async () => {
+    const name = $('#tp-name').value.trim(); const prompt = $('#tp-prompt').value.trim();
+    if (!name || !prompt) { toast('模板名与正文不能为空', 'err'); return; }
+    const body = { id: tplEditId || undefined, name, purpose: $('#tp-purpose').value.trim(), prompt, tags: $('#tp-tags').value.split(/[,，]/).map(x => x.trim()).filter(Boolean) };
+    await api('/api/kb/templates', { method:'POST', body });
+    tplEditId = null; toast('模板已保存', 'ok'); renderKb();
+  });
+  $('#tp-cancel').onclick = () => { tplEditId = null; renderKb(); };
+  $$('[data-edit]', box).forEach(b => b.onclick = () => {
+    const e = entries.find(x => x.id === b.dataset.edit); if (!e) return;
+    tplEditId = e.id; renderTemplatesTab();
+    $('#tp-name').value = e.name; $('#tp-purpose').value = e.purpose || ''; $('#tp-prompt').value = e.prompt;
+    $('#tp-tags').value = (e.tags||[]).join('，');
+  });
+  $$('[data-del]', box).forEach(b => b.onclick = busy(async () => {
+    if (!confirm('确定删除这个模板吗？')) return;
+    await api('/api/kb/templates/' + b.dataset.del, { method:'DELETE' }); toast('已删除', 'ok'); renderKb();
+  }));
+}
+/* ---- 反馈学习 ---- */
+let fbCands = []; let fbRecordCount = 0;
+function renderFeedbackTab(){
+  const box = $('#kb-content');
+  box.innerHTML = `<div class="panel-box"><h3><span>反馈学习</span><span class="chip accent">从你的修改中提炼偏好</span></h3>` +
+    `<div style="font-size:13px;color:var(--muted)">创作时选择「修改这段」，你的修改会被记录到 workspace/feedback/。之后可在这里提炼成风格规则——AI 会越来越像你。</div>` +
+    `<div class="pending-actions" style="margin-top:12px"><button class="btn primary" id="fb-analyze">分析我的修改</button><label class="chip" style="cursor:pointer"><input type="checkbox" id="fb-llm" checked> 用 AI 辅助分析</label></div>` +
+    `<div id="fb-result"></div></div>`;
+  $('#fb-analyze').onclick = busy(async () => {
+    const d = await api('/api/feedback/analyze', { method:'POST', body:{ useLlm: $('#fb-llm').checked } });
+    fbCands = d.candidates || []; fbRecordCount = d.records || 0;
+    if (!fbRecordCount) { $('#fb-result').innerHTML = '<div class="empty">暂无可学习的修改记录。<br><span style="font-size:12px">创作时对段落点「修改」，反馈会被自动记录。</span></div>'; return; }
+    if (!fbCands.length) { $('#fb-result').innerHTML = '<div class="empty">没有提炼出足够明确的偏好（修改可能偏内容而非风格）。<br><span style="font-size:12px">继续创作，积累更多修改后再来。</span></div>'; return; }
+    const styles = await loadKb('styles');
+    $('#fb-result').innerHTML = `<div style="font-size:12.5px;color:var(--muted);margin:10px 0 6px">基于 ${fbRecordCount} 条修改记录，提炼出 ${fbCands.length} 条候选偏好：</div>` +
+      fbCands.map((c,i) => `<label class="fact-cand"><input type="checkbox" data-fbi="${i}" checked><span><b>[${Math.round(c.confidence*100)}%]</b> ${esc(c.rule)}<br><span style="color:var(--dim);font-size:12px">依据：${esc(c.reason)}</span></span></label>`).join('') +
+      `<div class="row" style="margin-top:12px"><div class="field"><label>写入哪里</label><select id="fb-target"><option value="">新建风格</option>${styles.map(s => `<option value="${s.id}">追加到「${esc(s.name)}」</option>`).join('')}</select></div><div class="field"><label>新风格名（选新建时）</label><input id="fb-name" placeholder="从反馈中学习"></div></div>` +
+      `<div class="pending-actions"><button class="btn primary" id="fb-apply">应用并写入风格库</button></div>`;
+    $('#fb-apply').onclick = busy(async () => {
+      const indexes = fbCands.map((_,i) => i).filter(i => { const cb = $(`[data-fbi="${i}"]`); return cb && cb.checked; });
+      const targetStyleId = $('#fb-target').value || null;
+      const newStyleName = $('#fb-name').value.trim() || '从反馈中学习';
+      const d = await api('/api/feedback/apply', { method:'POST', body:{ indexes, candidates: fbCands, targetStyleId, newStyleName } });
+      toast('已更新风格库：' + d.style.name + '（新增 ' + d.appliedCount + ' 条规则，学习 ' + d.learned + ' 条记录）', 'ok');
+      fbCands = []; renderKb();
+    });
+  }, '分析中…');
+}
+/* ================= 设置 ================= */
+async function renderSettings(){
+  await refreshState(); updateSidebar();
+  const cfg = G.state.config;
+  const active = cfg.providers.find(p => p.id === cfg.activeProviderId);
+  $('#main').innerHTML = `<div class="page"><div class="page-head"><div><div class="page-title">模型与设置</div><div class="page-sub">配置模型与偏好。密钥只保存在本地。</div></div></div>` +
+    `<div class="panel-box"><h3><span>API 供应商</span><span class="chip">演示模式无需任何配置</span></h3>` +
+    cfg.providers.map(p => `<label class="prov-card ${p.id===cfg.activeProviderId?'active':''}"><input type="radio" name="prov" class="pc-radio" value="${p.id}" ${p.id===cfg.activeProviderId?'checked':''}><span style="flex:1"><div class="pc-name">${esc(p.name)}</div><div class="pc-sub">${p.hasKey ? '<span class="badge-ok">✔ 已配置</span> · ' : '未配置密钥 · '}模型 ${esc(p.model || '未填')}${p.baseUrl ? ' · ' + esc(p.baseUrl) : ''}</div></span></label>`).join('') +
+    `<div id="prov-fields" class="card" style="margin-top:12px"></div></div>` +
+    `<div class="panel-box"><h3><span>全局偏好</span></h3>` +
+    `<div class="row"><div class="field"><label>默认审批模式</label><select id="g-mode">${['auto','segment','chapter'].map(m => `<option value="${m}" ${m===cfg.approvalMode?'selected':''}>${MODE_LABEL[m]}</option>`).join('')}</select></div><div class="field"><label>每 N 章宏观一致性检查</label><input id="g-macro" type="number" min="1" max="100" value="${cfg.macroCheckInterval}"></div></div>` +
+    `<div class="row"><div class="field"><label>默认审查重点（可留空）</label><input id="g-focus" value="${esc(cfg.reviewFocus)}" placeholder="如：设定一致性、人物动机"></div><div class="field"><label>默认审查力度</label><select id="g-strict">${['standard','strict','lenient'].map(x => `<option value="${x}" ${x===cfg.reviewStrictness?'selected':''}>${STRNESS[x]}</option>`).join('')}</select></div></div>` +
+    `<div class="row"><div class="field"><label><input type="checkbox" id="g-rag" style="width:auto" ${cfg.rag.enabled?'checked':''}> 启用深度 RAG（设定一致性检索）</label></div><div class="field"><label>RAG 每类检索条数 topK</label><input id="g-topk" type="number" min="1" max="20" value="${cfg.rag.topK}"></div></div>` +
+    `<div class="field"><label>总规划 Agent 系统提示词 <span style="color:var(--muted)">（留空使用内置默认）</span></label><textarea id="g-planner" rows="6" placeholder="留空使用内置默认提示词">${esc(cfg.plannerSystemPrompt || '')}</textarea><div class="pending-actions" style="margin-top:6px"><button class="btn small" id="g-planner-reset" type="button">恢复默认</button></div></div>` +
+    `<div class="field"><label>创作 Agent 系统提示词 <span style="color:var(--muted)">（留空使用内置默认）</span></label><textarea id="g-writer" rows="6" placeholder="留空使用内置默认提示词">${esc(cfg.writerSystemPrompt || '')}</textarea><div class="pending-actions" style="margin-top:6px"><button class="btn small" id="g-writer-reset" type="button">恢复默认</button></div></div>` +
+    `<div class="pending-actions"><button class="btn primary" id="g-save">保存全局偏好</button></div></div>` +
+    `<div class="panel-box"><h3><span>数据与隐私</span></h3><div style="font-size:13px;color:var(--muted);line-height:2">作品与设置全部保存在本地 workspace/ 目录，均为普通文件，不联网上传。</div></div></div>`;
+  const renderProvFields = () => {
+    const p = cfg.providers.find(x => x.id === document.querySelector('input[name=prov]:checked')?.value);
+    if (!p || p.id === 'demo') { $('#prov-fields').innerHTML = '<div style="color:var(--muted);font-size:13px">演示模式：无需密钥即可体验完整流程。</div>'; return; }
+    $('#prov-fields').innerHTML = `<div class="field"><label>API Key（${p.hasKey ? '已配置，留空保持不变' : '未配置'}）</label><input id="p-key" type="password" placeholder="sk-..."></div>` +
+      (p.id === 'custom' ? `<div class="field"><label>接口地址（OpenAI 兼容，不含 /chat/completions）</label><input id="p-base" value="${esc(p.baseUrl)}" placeholder="https://your-api.example.com/v1"></div>` : '') +
+      `<div class="field"><label>模型名</label><input id="p-model" value="${esc(p.model)}"></div>` +
+      `<div class="pending-actions"><button class="btn primary" id="p-save">保存并切换</button></div>`;
+    $('#p-save').onclick = busy(async () => {
+      await api('/api/config/provider', { method:'POST', body:{ providerId: p.id, apiKey: $('#p-key').value.trim() || undefined, model: $('#p-model').value.trim() || undefined, baseUrl: p.id === 'custom' ? $('#p-base').value.trim() : undefined } });
+      toast('已保存' + ($('#p-key').value.trim() ? '并切换' : ''), 'ok'); renderSettings();
+    });
+  };
+  renderProvFields();
+  $$('input[name=prov]').forEach(r => r.onchange = renderProvFields);
+  $('#g-planner-reset').onclick = () => { $('#g-planner').value = ''; toast('已恢复为内置默认提示词（保存后生效）', 'ok'); };
+  $('#g-writer-reset').onclick = () => { $('#g-writer').value = ''; toast('已恢复为内置默认提示词（保存后生效）', 'ok'); };
+  $('#g-save').onclick = busy(async () => {
+    await api('/api/config/general', { method:'POST', body:{ approvalMode: $('#g-mode').value, macroCheckInterval: parseInt($('#g-macro').value,10), reviewFocus: $('#g-focus').value, reviewStrictness: $('#g-strict').value, plannerSystemPrompt: $('#g-planner').value, writerSystemPrompt: $('#g-writer').value, rag: { enabled: $('#g-rag').checked, topK: parseInt($('#g-topk').value,10) } } });
+    toast('全局偏好已保存', 'ok'); renderSettings();
+  });
+}
+/* ================= 使用说明 ================= */
+function renderGuide(){
+  $('#main').innerHTML = `<div class="page guide"><div class="page-head"><div><div class="page-title">使用说明</div><div class="page-sub">快速上手，一分钟开写。</div></div></div>` +
+  `<h2>1. 开始创作</h2><p>在「开始创作」输入故事要求，点击开始。规划、写作、审查都会在创作台实时显示。默认演示模式无需任何配置。</p>` +
+  `<h2>2. 审批模式</h2><p><b>自动</b>：生成即采纳；<b>逐段</b>：每段确认；<b>逐章</b>：章末确认。创作中可随时切换。</p>` +
+  `<h2>3. 审查</h2><p>章节与宏观一致性自动检查。可选择重写本章（落实审查意见）、调整下次审查力度或忽略继续。</p>` +
+  `<h2>4. 知识库</h2><ul><li><b>风格库</b>：粘贴范例自动提炼写作规则；</li><li><b>设定库</b>：对话式创建或自动提取；</li><li><b>模板库</b>：保存常用提问模板；</li><li><b>反馈学习</b>：你的修改会自动沉淀为风格偏好。</li></ul>` +
+  `<h2>5. 数据</h2><p>作品与知识库全部保存在本项目的 <code>workspace/</code> 目录，本地文件，不上传。</p>` +
+  `<h2>6. 配置模型</h2><p>在「模型与设置」填入 API Key 与模型名即可使用真实模型创作。</p></div>`;
+}
+/* ================= 启动 ================= */
+(async function init(){
+  try { await refreshState(); updateSidebar(); } catch(e) {}
+  route();
+})();
+</script>
+</body>
+</html>

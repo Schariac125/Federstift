@@ -1,0 +1,29 @@
+{
+  "name": "federstift",
+  "version": "0.10.0",
+  "description": "羽笔 Federstift —— AI 长篇小说创作平台（三 Agent 架构 + RAG 设定一致性 + 反馈学习）",
+  "bin": {
+    "federstift": "dist/cli/index.js"
+  },
+  "main": "dist/cli/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli/index.js",
+    "dev": "tsc -p tsconfig.json && node dist/cli/index.js",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node scripts/smoke.js",
+    "e2e": "node scripts/e2e.js",
+    "doctor": "node dist/cli/index.js doctor",
+    "gui": "node dist/cli/index.js gui",
+    "gui:dev": "tsc -p tsconfig.json && node dist/cli/index.js gui",
+    "gui_e2e": "node scripts/gui_e2e.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0"
+  }
+}
