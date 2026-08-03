@@ -12,17 +12,18 @@ import { getActiveProvider, setApprovalMode } from '../core/config';
 import { createLLM, type LLMClientLike } from '../core/llm';
 import { newId, nowIso } from '../core/storage';
 import type { KbService } from '../kb/service';
-import { planNovel } from '../agents/planner';
-import { writeSegment } from '../agents/writer';
+import { planNovel, revisePlan, diagnoseRewrite } from '../agents/planner';
+import { writeSegment, planChapterRewrite } from '../agents/writer';
+import type { ChapterRewritePlan } from '../agents/writer';
 import type { WriteSegmentInput } from '../agents/writer';
-import { reviewChapter, macroCheck, normalizeStrictness, STRICTNESS_LABEL } from '../agents/reviewer';
+import { reviewChapter, macroCheck, normalizeStrictness, STRICTNESS_LABEL, buildRewriteDirective, decideReviewAction } from '../agents/reviewer';
 import type { ReviewReport, ReviewStrictness } from '../agents/reviewer';
 import type { ChapterPlan, CreationPlan } from '../agents/types';
-import { buildRagContext, renderContext, emptyRetrieval, newChapterIndexCache } from '../rag/context';
+import { buildRagContext, renderContext, emptyRetrieval, newChapterIndexCache, settingsSummaryByRelevance } from '../rag/context';
 import type { IndexSources } from '../rag/indexer';
 import type { ApprovalMode } from '../core/types';
-import { loadNovel, newNovel, saveNovel, saveNovelDelta } from '../pipeline/novel';
-import type { Chapter, NovelState } from '../pipeline/novel';
+import { loadNovel, newNovel, saveNovel, saveNovelDelta, buildMacroCheckText } from '../pipeline/novel';
+import type { Chapter, ChapterSegment, NovelState } from '../pipeline/novel';
 import { listUnprocessedFeedback, recordFeedback } from '../learning/feedback';
 import { logger } from '../core/logger';
 
@@ -97,6 +98,14 @@ export class GuiSession {
   /** 本会话内已跳过（未回答）的问题，避免重复打扰 */
   private dismissed = new Set<string>();
   private fixDirective = '';
+  /** 整章重写的方案（审查意见驱动）：按段落分配修改要点，逐段注入，失败回落结构化指令 */
+  private rewritePlan: ChapterRewritePlan | null = null;
+  /** 每章已重写次数（含用户打回；P1b 反复返工时触发总规划诊断） */
+  private rewriteCounts = new Map<number, number>();
+  /** 自动模式每章已自动重写次数（上限 AUTO_REWRITE_MAX，防止审查不过的死循环） */
+  private autoRewrites = new Map<number, number>();
+  /** 自动模式已进行的计划级修订次数（每作品最多 PLAN_REVISE_MAX 次） */
+  private planRevises = 0;
   private log: SessionLogEntry[] = [];
   private status: SessionStatus = 'writing';
   /** 已完成（正文写满且通过审查）的章数游标；决定下一章写哪一章 */
@@ -185,10 +194,7 @@ export class GuiSession {
     const styles = this.service.listStyles();
     const settings = this.service.listSettings();
     const styleRules = styles.filter((s) => this.state.selectedStyleIds.includes(s.id)).flatMap((s) => s.rules);
-    const settingsSummary = settings
-      .slice(0, 60)
-      .map((s) => '- ' + s.name + '：' + s.content.slice(0, 80))
-      .join('\n');
+    const settingsSummary = settingsSummaryByRelevance(settings, this.state.requirement, 12);
     const target = Math.min(50, Math.max(1, this.state.planTarget ?? 10));
     const plan = await planNovel(this.llm, {
       requirement: this.state.requirement,
@@ -285,11 +291,12 @@ export class GuiSession {
         continue;
       }
 
-      // 写段落
-      if (chapter.segments.length < cp.segments) {
-        const segOrder = chapter.segments.length + 1;
+      // 写段落：按段号补齐（定向重写后中间段落可能缺失）
+      const missingOrder = this.nextMissingOrder(chapter, cp.segments);
+      if (missingOrder !== null) {
+        const segOrder = missingOrder;
         emit?.({ type: 'segment', chapter: chOrder, segOrder, title: chapter.title || '', goal: cp.goal || '' });
-        const text = await this.writeOneSegment(cp, chOrder, chapter, emit);
+        const text = await this.writeOneSegment(cp, chOrder, chapter, segOrder, emit);
         if (this.mode() === 'segment') {
           this.status = 'segment';
           this.pending = { kind: 'segment', chapter: chOrder, segOrder, text };
@@ -309,14 +316,13 @@ export class GuiSession {
         return this.snapshot();
       }
       if (review.redo) {
-        this.state.chapters.pop();
-        this.fixDirective = review.fixDirective;
+        await this.performRewrite(chOrder, chapter, review.report ?? null);
         this.reviewProgress = null;
         this.persist(true);
-        this.logEntry('info', '根据审查意见重写第 ' + chOrder + ' 章…');
         continue;
       }
       this.fixDirective = '';
+      this.rewritePlan = null;
       this.persist();
 
       // 整章确认（逐章模式）：批准后由 decide 推进到下一章
@@ -430,12 +436,12 @@ export class GuiSession {
         return this.snapshot();
       }
       if (action === 'redo') {
-        this.state.chapters.pop();
+        const ch = this.state.chapters[this.state.chapters.length - 1];
+        await this.performRewrite(pending.chapter, ch, null);
         this.reviewProgress = null;
-        this.persist(true);
         this.pending = null;
         this.status = 'writing';
-        this.logEntry('info', '整章重写第 ' + pending.chapter + ' 章…');
+        this.persist(true);
         return this.snapshot();
       }
       if (action === 'stop') {
@@ -465,14 +471,12 @@ export class GuiSession {
         return this.snapshot();
       }
       if (action === 'redo') {
-        const directive = this.fixDirectiveFrom(pending.report);
-        this.state.chapters.pop();
-        this.fixDirective = directive;
+        const ch = this.state.chapters[this.state.chapters.length - 1];
+        await this.performRewrite(pending.chapter, ch, pending.report);
         this.reviewProgress = null;
         this.pending = null;
         this.status = 'writing';
         this.persist(true);
-        this.logEntry('info', '根据审查意见重写第 ' + pending.chapter + ' 章…');
         return this.snapshot();
       }
       return this.snapshot();
@@ -545,7 +549,13 @@ export class GuiSession {
   }
 
   private pushSegment(chapter: Chapter, segOrder: number, text: string, original?: string): void {
-    chapter.segments.push({ order: segOrder, text, userEdited: Boolean(original), original: original || undefined });
+    const seg: ChapterSegment = { order: segOrder, text, userEdited: Boolean(original), original: original || undefined };
+    const idx = chapter.segments.findIndex((x) => x.order === segOrder);
+    if (idx >= 0) chapter.segments[idx] = seg;
+    else {
+      chapter.segments.push(seg);
+      chapter.segments.sort((a, b) => a.order - b.order);
+    }
     if (original && original !== text) {
       recordFeedback({
         id: newId('fb'),
@@ -561,7 +571,7 @@ export class GuiSession {
     this.logEntry('segment', '第 ' + chapter.order + ' 章第 ' + segOrder + ' 段完成（' + text.length + ' 字）');
   }
 
-  private async buildInput(cp: ChapterPlan | null, chOrder: number, chapter: Chapter): Promise<WriteSegmentInput> {
+  private async buildInput(cp: ChapterPlan | null, chOrder: number, chapter: Chapter, segOrder: number): Promise<WriteSegmentInput> {
     const allSettings = this.service.listSettings();
     const allStyles = this.service.listStyles();
     const usedSettings = allSettings.filter((s) => this.state.selectedSettingIds.includes(s.id));
@@ -574,18 +584,18 @@ export class GuiSession {
     const sources: IndexSources = { settings: settingPool, styles: stylePool, chapters: this.state.chapters, notes: this.state.authorNotes };
     const retrieved = this.cfg.rag.enabled ? buildRagContext(query, sources, this.cfg.rag, this.ragChapterCache) : emptyRetrieval();
     const context = renderContext(retrieved, recent);
-    const nextBeat = cp?.beats[chapter.segments.length] ?? '';
+    const nextBeat = cp?.beats[segOrder - 1] ?? '';
     return {
       requirement: this.state.requirement,
       context,
       chapterGoal: chTitle + '：' + (cp?.goal ?? ''),
       nextBeat,
-      fixDirective: this.fixDirective,
+      fixDirective: this.segmentFixDirective(segOrder),
     };
   }
 
-  private async writeOneSegment(cp: ChapterPlan, chOrder: number, chapter: Chapter, emit?: (ev: SessionStreamEvent) => void): Promise<string> {
-    const input = await this.buildInput(cp, chOrder, chapter);
+  private async writeOneSegment(cp: ChapterPlan, chOrder: number, chapter: Chapter, segOrder: number, emit?: (ev: SessionStreamEvent) => void): Promise<string> {
+    const input = await this.buildInput(cp, chOrder, chapter, segOrder);
     try {
       return await writeSegment(this.llm, input, 0.85, (delta) => emit?.({ type: 'text', delta }), this.cfg.writerSystemPrompt);
     } catch (e) {
@@ -610,28 +620,22 @@ export class GuiSession {
     chOrder: number,
     chapter: Chapter,
     emit?: (ev: SessionStreamEvent) => void
-  ): Promise<{ redo: boolean; fixDirective: string; pending?: PendingDecision }> {
+  ): Promise<{ redo: boolean; fixDirective: string; report?: ReviewReport; auto?: boolean; pending?: PendingDecision }> {
     const doChapterReview = Boolean(cp.reviewAfter);
     const doMacro = chOrder % this.cfg.macroCheckInterval === 0;
     if (!doChapterReview && !doMacro) return { redo: false, fixDirective: '' };
 
     const settings = this.service.listSettings();
-    const settingsSummary = settings
-      .slice(0, 40)
-      .map((s) => '- ' + s.name + '：' + s.content.slice(0, 80))
-      .join('\n');
+    const chapterText = chapter.segments.map((s) => s.text).join('\n\n');
+    const settingsSummary = settingsSummaryByRelevance(settings, chapterText + '\n' + cp.goal, 12);
     const styleRules = this.service
       .listStyles()
       .filter((s) => this.state.selectedStyleIds.includes(s.id))
       .flatMap((s) => s.rules);
-    const chapterText = chapter.segments.map((s) => s.text).join('\n\n');
-    const allText = this.state.chapters
-      .map((ch) => '第 ' + ch.order + ' 章 ' + ch.title + '\n' + ch.segments.map((s) => s.text).join('\n'))
-      .join('\n\n');
     const focus = (this.state.reviewFocus ?? '').trim() || (this.cfg.reviewFocus ?? '').trim();
     const strictness = normalizeStrictness(this.state.reviewStrictness ?? this.cfg.reviewStrictness);
-    // 审查报告始终呈现给作者判断：审批模式只决定正文段落/整章的采纳节奏，不跳过审查判断
-    const needDecision = true;
+    // 非自动模式：审查报告始终呈现给作者判断；自动模式：规则层裁决（decideReviewAction），总规划只在计划级问题/反复返工时介入
+    const autoMode = this.mode() === 'auto';
     const prog = this.reviewProgress ?? { chapter: chOrder, chapterDone: false, macroDone: false };
 
     if (doChapterReview && !prog.chapterDone) {
@@ -650,13 +654,26 @@ export class GuiSession {
       emit?.({ type: 'review', text: '章节审查完成：' + (report.passed ? '通过' : '未通过') + '（总分 ' + report.score.overall + '）' });
       prog.chapterDone = true;
       this.reviewProgress = prog;
-      if (needDecision) return { redo: false, fixDirective: '', pending: { kind: 'review', reviewKind: 'chapter', chapter: chOrder, report } };
+      if (!autoMode) {
+        return { redo: false, fixDirective: '', pending: { kind: 'review', reviewKind: 'chapter', chapter: chOrder, report } };
+      }
+      // 自动模式：规则层裁决（0 次额外 LLM 调用）；自动重写最多 AUTO_REWRITE_MAX 次，避免死循环
+      const decision = decideReviewAction(report);
+      if (decision !== 'ignore') {
+        const rewrites = this.autoRewrites.get(chOrder) ?? 0;
+        if (rewrites >= AUTO_REWRITE_MAX) {
+          this.logEntry('info', '自动模式：第 ' + chOrder + ' 章已自动重写 ' + rewrites + ' 次仍未通过，保留当前版本继续（可随时手动重写）');
+        } else {
+          this.autoRewrites.set(chOrder, rewrites + 1);
+          return { redo: true, fixDirective: '', report, auto: true };
+        }
+      }
     }
 
     if (doMacro && !prog.macroDone) {
       emit?.({ type: 'log', text: '正在宏观一致性检查（第 ' + chOrder + ' 章）…' });
       const report = await macroCheck(this.llm, {
-        text: allText,
+        text: buildMacroCheckText(this.state.chapters),
         goal: this.state.requirement,
         settingsSummary,
         styleRules,
@@ -669,7 +686,26 @@ export class GuiSession {
       emit?.({ type: 'review', text: '宏观一致性检查完成：' + (report.passed ? '通过' : '未通过') + '（总分 ' + report.score.overall + '）' });
       prog.macroDone = true;
       this.reviewProgress = prog;
-      if (needDecision) return { redo: false, fixDirective: '', pending: { kind: 'review', reviewKind: 'macro', chapter: chOrder, report } };
+      if (!autoMode) {
+        return { redo: false, fixDirective: '', pending: { kind: 'review', reviewKind: 'macro', chapter: chOrder, report } };
+      }
+      // 自动模式：宏观不过 → P1a 总规划 Agent 修订创作计划（每作品最多 PLAN_REVISE_MAX 次），正文不重写
+      if (!report.passed && this.planRevises < PLAN_REVISE_MAX) {
+        const chaptersSummary = this.state.chapters.map((c) => '第 ' + c.order + ' 章 ' + c.title).join('；') + '（已写 ' + this.state.chapters.length + ' 章）';
+        const revised = await revisePlan(this.llm, {
+          requirement: this.state.requirement,
+          plan: this.state.plan ?? { premise: '', strategy: '', styleDirectives: [], questions: [], reviewSchedule: '', chapters: [] },
+          report,
+          chaptersSummary,
+        });
+        if (revised) {
+          this.state.plan = revised;
+          this.planDirty = true;
+          this.planRevises++;
+          this.logEntry('plan', '宏观检查发现计划级问题，总规划 Agent 已修订创作计划');
+          emit?.({ type: 'log', text: '宏观检查发现计划级问题，总规划 Agent 已修订创作计划' });
+        }
+      }
     }
 
     return { redo: false, fixDirective: '' };
@@ -690,12 +726,72 @@ export class GuiSession {
     });
   }
 
-  private fixDirectiveFrom(report: ReviewReport): string {
-    const errs = report.issues
-      .filter((i) => i.severity !== 'info')
-      .map((i) => i.description + '（建议：' + i.suggestion + '）');
-    const parts = [...errs, ...report.suggestions];
-    return parts.slice(0, 6).join('；');
+  /**
+   * 执行重写（GUI/CLI 共用的统一入口）：
+   * - 优先定向重写：只删除重写方案指定的段落（或审查报告 targetSegments），其余保留；
+   * - 无定向目标则整章重写（pop 章节，重新生成全部段落）；
+   * - P1b：同一章重写 ≥ REWRITE_DIAGNOSE_MIN 次时，先由总规划 Agent 诊断，再生成重写方案。
+   */
+  private async performRewrite(chOrder: number, chapter: Chapter | undefined, report: ReviewReport | null): Promise<void> {
+    const cp = this.state.plan?.chapters[this.doneChapters];
+    const chapterText = chapter ? chapter.segments.map((seg) => seg.text).join('\n\n') : '';
+    const count = (this.rewriteCounts.get(chOrder) ?? 0) + 1;
+    this.rewriteCounts.set(chOrder, count);
+    let diagnosis: string | null = null;
+    if (report && count >= REWRITE_DIAGNOSE_MIN) {
+      diagnosis = await diagnoseRewrite(this.llm, {
+        requirement: this.state.requirement,
+        chapterTitle: chapter?.title ?? '',
+        chapterGoal: cp?.goal ?? '',
+        chapterText,
+        report,
+        pastDirectives: this.fixDirective ? [this.fixDirective] : [],
+      });
+    }
+    if (diagnosis) this.logEntry('plan', '总规划 Agent 诊断：' + (diagnosis.length > 120 ? diagnosis.slice(0, 120) + '…' : diagnosis));
+    this.rewritePlan = report
+      ? await planChapterRewrite(this.llm, {
+          requirement: this.state.requirement,
+          chapterTitle: chapter?.title ?? '',
+          chapterGoal: cp?.goal ?? '',
+          chapterText,
+          report,
+          diagnosis: diagnosis ?? undefined,
+        })
+      : null;
+    this.fixDirective = report ? buildRewriteDirective(report) : '';
+    if (!chapter) return;
+    // 定向重写：优先用重写方案指定的段；其次审查报告 targetSegments；都没有则整章
+    const targets = this.rewritePlan && this.rewritePlan.segments.length
+      ? this.rewritePlan.segments.map((x) => x.order)
+      : report?.action === 'patch'
+        ? (report.targetSegments ?? [])
+        : [];
+    if (targets.length) {
+      chapter.segments = chapter.segments.filter((x) => !targets.includes(x.order));
+      this.logEntry('info', (this.mode() === 'auto' ? '自动' : '按审查意见') + '定向重写第 ' + chOrder + ' 章（仅第 ' + targets.join('、') + ' 段）…');
+    } else {
+      this.state.chapters.pop();
+      this.logEntry('info', (this.mode() === 'auto' ? '自动' : '按审查意见') + '重写第 ' + chOrder + ' 章…');
+    }
+  }
+
+  /** 下一个缺失的段号（定向重写后中间段可能被删，按序补齐）；全部写完返回 null */
+  private nextMissingOrder(chapter: Chapter, total: number): number | null {
+    const existing = new Set(chapter.segments.map((x) => x.order));
+    for (let o = 1; o <= total; o++) if (!existing.has(o)) return o;
+    return null;
+  }
+
+  /** 当前段要携带的重写指令：有整章方案时取「方案 + 本段要点」，否则回落全局 fixDirective */
+  private segmentFixDirective(segOrder: number): string {
+    if (this.rewritePlan) {
+      const parts = ['【本章重写方案】' + this.rewritePlan.approach];
+      const seg = this.rewritePlan.segments.find((x) => x.order === segOrder);
+      if (seg) parts.push('【本段修改要点】' + seg.fix);
+      return parts.join('\n');
+    }
+    return this.fixDirective;
   }
 
   private logEntry(type: SessionLogEntry['type'], text: string): void {
@@ -727,6 +823,13 @@ export class GuiSession {
     };
   }
 }
+
+/** 自动模式下每章最多自动重写的次数（达到后保留当前版本继续，防死循环） */
+const AUTO_REWRITE_MAX = 1;
+/** 同一章重写达到该次数后，下一次重写前由总规划 Agent 诊断（P1b） */
+const REWRITE_DIAGNOSE_MIN = 2;
+/** 自动模式下每作品最多进行的计划级修订次数（P1a） */
+const PLAN_REVISE_MAX = 1;
 
 function planChapters(state: NovelState): number {
   return state.plan?.chapters.length ?? 0;

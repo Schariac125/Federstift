@@ -1,6 +1,7 @@
 import type { LLMClientLike } from '../core/llm';
 import type { LLMMessage } from '../core/types';
 import { logger } from '../core/logger';
+import type { ReviewReport } from './reviewer';
 
 /**
  * 创作 Agent：根据约束生成小说正文段落。
@@ -82,6 +83,107 @@ export function buildSegmentPrompt(input: WriteSegmentInput): string {
 }
 
 /** 生成一段正文（温度可调：常规 0.85，重写/修改 1.0-1.1）。传入 onDelta 时启用流式输出。 */
+/** 重写方案输入：审查报告 + 本章原文，供重写规划 */
+export interface RewritePlanInput {
+  requirement: string;
+  chapterTitle: string;
+  chapterGoal: string;
+  chapterText: string;
+  report: ReviewReport;
+  /** 反复返工时的总规划诊断（可选，注入重写方案参考） */
+  diagnosis?: string;
+}
+
+/** 整章重写方案：整体思路 + 按段落分配的修改要点（order 对应章内段序，从 1 开始） */
+export interface ChapterRewritePlan {
+  approach: string;
+  segments: { order: number; fix: string }[];
+}
+
+/**
+ * 重写方案规划师的系统提示：必须输出严格 JSON，并包含示例格式。
+ * 只规划「怎么改」，不生成正文；把审查意见分配到具体段落，避免整章重写各自为政。
+ */
+export const REWRITE_PLANNER_SYSTEM = `你是「重写方案规划师」：把审查报告转化为可执行的整章重写方案。你不写正文，只规划怎么改。
+
+# 职责
+1. 通读审查报告与本章原文，判断哪些问题必须修正、哪些优点必须保留；
+2. 把修改要求分配到具体段落（order 从 1 开始，与章内段序一致），每段给一句可直接执行的修改要点；
+3. approach 用 2-4 句话说明整章重写的整体思路：先改什么、保持什么、注意什么。
+
+# 纪律
+- 只输出重写方案，绝不输出小说正文；
+- 保持「最小必要修改」，审查没指出的地方不要大改；
+- 不新增与创作要求、设定库冲突的内容。
+
+# 输出要求
+只输出一个严格 JSON 对象，不要任何其他文字（不要 markdown 围栏、不要注释、不要前后缀）。
+格式示例如下（请完全按此结构输出）：
+{
+  "approach": "整体保持原结构与优点，修正设定冲突与长句问题：第1段统一佩剑描写为左手剑，第3段拆分两处超40字长句，章末保留悬念钩子。",
+  "segments": [
+    { "order": 1, "fix": "把「右手拔剑」改为「左手拔剑」，与设定库保持一致" },
+    { "order": 3, "fix": "拆分两处超过40字的长句，保持短促节奏" }
+  ]
+}
+
+注意：
+- order 只列出需要修改的段落，不需要改的段落不要出现；
+- fix 一句话说清本段改什么，能让创作 Agent 直接照做；
+- 如果本章没有需要修改的段落，segments 输出空数组。`;
+
+/** 规范化重写方案：钳制/补默认，防止模型输出越界；无法形成有效方案时返回 null（调用方回落结构化指令） */
+export function normalizeRewritePlan(raw: Partial<ChapterRewritePlan> | null | undefined): ChapterRewritePlan | null {
+  const approach = String(raw?.approach ?? '').trim();
+  const segments = Array.isArray(raw?.segments)
+    ? raw.segments
+        .filter((s) => s && Number.isFinite(Number(s.order)) && String(s?.fix ?? '').trim().length > 0)
+        .map((s) => ({ order: Math.max(1, Math.floor(Number(s.order))), fix: String(s.fix).trim().slice(0, 300) }))
+        .slice(0, 10)
+    : [];
+  if (!approach && !segments.length) return null;
+  return {
+    approach: approach || '按审查意见逐段修正，保持已确认的设定与优点不变。',
+    segments,
+  };
+}
+
+/** 整章重写前调用：基于审查报告生成重写方案（1 次调用）；失败返回 null，调用方回落结构化修改指令 */
+export async function planChapterRewrite(
+  llm: LLMClientLike,
+  input: RewritePlanInput,
+  customSystem?: string
+): Promise<ChapterRewritePlan | null> {
+  const diagPart = input.diagnosis ? '\n【总规划诊断（必须重视）】' + input.diagnosis : '';
+  const issuePart = input.report.issues.length
+    ? input.report.issues
+        .map((i) => '- [' + i.severity + '/' + i.dimension + '] ' + i.description + (i.suggestion ? '（建议：' + i.suggestion + '）' : ''))
+        .join('\n')
+    : '（无问题）';
+  const user = [
+    '【创作要求】' + input.requirement.slice(0, 2000),
+    '【本章】' + input.chapterTitle,
+    '【本章目标】' + input.chapterGoal,
+    '【审查报告】',
+    '问题：\n' + issuePart,
+    '优点：' + (input.report.strengths.length ? input.report.strengths.join('；') : '（无）'),
+    '整体建议：' + (input.report.suggestions.length ? input.report.suggestions.join('；') : '（无）'),
+    '【本章原文】',
+    input.chapterText.slice(0, 12000),
+    '',
+    diagPart,
+    '请为本章制定重写方案，只输出严格 JSON。',
+  ].join('\n');
+  try {
+    const system = customSystem && customSystem.trim() ? customSystem : REWRITE_PLANNER_SYSTEM;
+    const raw = await llm.json<Partial<ChapterRewritePlan>>(system, user, { temperature: 0.3 });
+    return normalizeRewritePlan(raw);
+  } catch (e) {
+    logger.warn('重写方案生成失败，回落结构化修改指令：' + (e instanceof Error ? e.message : String(e)));
+    return null;
+  }
+}
+
 export async function writeSegment(
   llm: LLMClientLike,
   input: WriteSegmentInput,

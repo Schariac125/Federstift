@@ -1,6 +1,7 @@
 import type { LLMClientLike } from '../core/llm';
 import { logger } from '../core/logger';
 import type { CreationPlan, PlanInput } from './types';
+import type { ReviewReport } from './reviewer';
 
 /**
  * 总规划 Agent 的系统提示：必须输出严格 JSON，并给出示例格式。
@@ -131,5 +132,140 @@ ${input.requirement.slice(0, 2000)}
   } catch (e) {
     logger.warn('规划 Agent 失败，使用默认计划：' + (e instanceof Error ? e.message : String(e)));
     return normalizePlan(null, input.targetChapters);
+  }
+}
+
+/**
+ * 计划修订（P1）：宏观一致性检查发现跨章/计划级问题时，由总规划 Agent 修订全局策略。
+ * 只修订计划、不重写正文；保持章节总数不变，调整后续章节目标与审查安排。
+ */
+export const PLAN_REVISER_SYSTEM = `你是「长篇叙事总规划师」的修订模式：宏观一致性检查发现当前创作计划存在跨章节/结构性问题，请修订计划，让后续创作回到正轨。
+
+# 职责
+1. 通读宏观审查报告与当前计划，判断问题根源（结构、节奏、设定、人物弧线等）；
+2. 修订全局策略与后续章节目标；已完成的章节不要列在章节计划里，也不要要求重写已完成正文；
+3. 保持章节总数与已完成章节不变。
+
+# 纪律
+- 只输出修订后的创作计划（严格 JSON），不输出正文、不解释；
+- 不新增与创作要求冲突的内容。
+
+# 输出要求
+只输出一个严格 JSON 对象（结构与总规划首次输出一致）：
+{
+  "premise": "一句话复述创作意图",
+  "strategy": "修订后的全局策略（说明原计划哪里出了问题、后续如何调整）",
+  "styleDirectives": ["风格指令"],
+  "questions": [],
+  "reviewSchedule": "修订后的审查安排",
+  "chapters": [
+    { "order": 1, "title": "章节标题", "goal": "本章目标", "beats": ["节拍"], "questions": [], "reviewAfter": false, "segments": 4 }
+  ]
+}
+注意：chapters 数量必须等于当前计划总章数；已完成的章节 goal/beats 可保留原样。`;
+
+/** 计划修订输入：当前计划 + 宏观审查报告 + 全书进度 */
+export interface RevisePlanInput {
+  requirement: string;
+  plan: CreationPlan;
+  report: ReviewReport;
+  chaptersSummary: string;
+}
+
+/** 调用总规划 Agent 修订创作计划；失败返回 null（调用方保持原计划） */
+export async function revisePlan(
+  llm: LLMClientLike,
+  input: RevisePlanInput,
+  customSystem?: string
+): Promise<CreationPlan | null> {
+  const issuePart = input.report.issues.length
+    ? input.report.issues
+        .map((i) => '- [' + i.severity + '/' + i.dimension + '] ' + i.description + (i.suggestion ? '（建议：' + i.suggestion + '）' : ''))
+        .join('\n')
+    : '（无问题）';
+  const planPart = input.plan.chapters
+    .map((c) => '- 第 ' + c.order + ' 章「' + c.title + '」目标：' + c.goal + (c.reviewAfter ? '（章末审查）' : ''))
+    .join('\n');
+  const user = [
+    '【创作要求】' + input.requirement.slice(0, 2000),
+    '【当前进度】' + input.chaptersSummary,
+    '【当前计划】',
+    planPart,
+    '【宏观审查报告】',
+    '问题：\n' + issuePart,
+    '整体建议：' + (input.report.suggestions.length ? input.report.suggestions.join('；') : '（无）'),
+    '',
+    '请修订创作计划，保持章节总数不变，只输出严格 JSON。',
+  ].join('\n');
+  try {
+    const system = customSystem && customSystem.trim() ? customSystem : PLAN_REVISER_SYSTEM;
+    const raw = await llm.json<Partial<CreationPlan>>(system, user, { temperature: 0.3 });
+    return normalizePlan(raw, input.plan.chapters.length);
+  } catch (e) {
+    logger.warn('计划修订失败，保持原计划：' + (e instanceof Error ? e.message : String(e)));
+    return null;
+  }
+}
+
+/**
+ * 返工诊断（P1）：同一章反复重写仍不通过时，由总规划 Agent 诊断「为什么改不好」，
+ * 输出新的修改方向，注入下一次重写方案。
+ */
+export const REWRITE_DIAGNOSTIC_SYSTEM = `你是「长篇叙事总规划师」的诊断模式：某一章反复重写仍未通过审查，请诊断问题根源并给出新的修改方向。你不写正文，只做诊断。
+
+# 职责
+1. 对比本章原文、审查报告与之前已尝试的修改要求，找出「改不好」的根源；
+2. 判断是正文问题、计划目标问题，还是审查与创作理解偏差；
+3. 输出诊断结论与下一步的具体方向。
+
+# 输出要求
+只输出一个严格 JSON 对象，不要任何其他文字：
+{
+  "diagnosis": "2-4 句话说明问题根源与新的修改方向",
+  "focus": ["可执行的方向1", "方向2"]
+}
+注意：diagnosis 要具体可执行，避免空泛建议。`;
+
+/** 返工诊断输入：章原文 + 审查报告 + 已尝试的修改要求 */
+export interface DiagnoseRewriteInput {
+  requirement: string;
+  chapterTitle: string;
+  chapterGoal: string;
+  chapterText: string;
+  report: ReviewReport;
+  pastDirectives: string[];
+}
+
+/** 调用总规划 Agent 诊断反复返工；失败返回 null（调用方直接按审查意见重写） */
+export async function diagnoseRewrite(
+  llm: LLMClientLike,
+  input: DiagnoseRewriteInput,
+  customSystem?: string
+): Promise<string | null> {
+  const issuePart = input.report.issues
+    .map((i) => '- [' + i.severity + '/' + i.dimension + '] ' + i.description + (i.suggestion ? '（建议：' + i.suggestion + '）' : ''))
+    .join('\n');
+  const past = input.pastDirectives.length ? input.pastDirectives.map((d) => '- ' + d.slice(0, 200)).join('\n') : '（首次诊断）';
+  const user = [
+    '【创作要求】' + input.requirement.slice(0, 2000),
+    '【本章】' + input.chapterTitle,
+    '【本章目标】' + input.chapterGoal,
+    '【已尝试的修改要求】',
+    past,
+    '【最近一次审查报告】',
+    issuePart,
+    '【本章原文】',
+    input.chapterText.slice(0, 10000),
+    '',
+    '请诊断反复重写仍未通过的原因，输出严格 JSON。',
+  ].join('\n');
+  try {
+    const system = customSystem && customSystem.trim() ? customSystem : REWRITE_DIAGNOSTIC_SYSTEM;
+    const raw = await llm.json<{ diagnosis?: string }>(system, user, { temperature: 0.3 });
+    const d = String(raw?.diagnosis ?? '').trim();
+    return d ? d.slice(0, 500) : null;
+  } catch (e) {
+    logger.warn('返工诊断失败，按审查意见直接重写：' + (e instanceof Error ? e.message : String(e)));
+    return null;
   }
 }

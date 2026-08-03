@@ -11,9 +11,39 @@
   --text:#ece7f6; --muted:#9a91b8; --dim:#6f6790;
   --accent:#d9a962; --accent-soft:#3a2f1e; --accent-line:#8a6a35;
   --green:#7fc98a; --red:#e07070; --yellow:#d9b45f; --blue:#7aa7e0;
+  --chip-g-bg:#16221a; --chip-y-bg:#221e12; --chip-r-bg:#221414; --chip-b-bg:#141c26; --chip-a-bg:#221c12;
+  --chip-g-bd:#2f4a34; --chip-y-bd:#4a4023; --chip-r-bd:#4a2626; --chip-b-bd:#24344a; --chip-a-bd:#4a3a22;
+  --sev-e-bg:#2a1414; --sev-w-bg:#241f10; --sev-i-bg:#131c26;
+  --sev-e-bd:#4a2626; --sev-w-bd:#4a4023; --sev-i-bd:#24344a;
+  --pending-bg:linear-gradient(180deg,#241d12,#1c1826);
+  --live-bg:linear-gradient(180deg,#231c10,#191426);
+  --overlay-bg:rgba(10,8,16,.62);
+  --body-text:#e6e0ee; --seg-text:#e3ddec; --plan-text:#ddd6ea; --md-text:#e3ddec;
+  --live-seg-text:#d8d1e6; --live-text:#e9e2f2;
+  --logo-grad:linear-gradient(135deg,#3a2f1e,#5a4526);
+  --primary-grad:linear-gradient(135deg,#b98a44,#d9a962);
   --radius:12px; --radius-s:8px;
   --font:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;
   --mono:'Cascadia Code','Consolas','JetBrains Mono',monospace;
+}
+/* 浅色主题：html[data-theme='light'] 覆盖同一套变量，其余样式无需改动 */
+[data-theme='light']{
+  --bg:#f6f3ec; --panel:#ffffff; --panel2:#f1ede4; --panel3:#e9e3d6;
+  --border:#e0d8c8; --border2:#c8bda4;
+  --text:#2c261f; --muted:#6f6758; --dim:#99907f;
+  --accent:#97682a; --accent-soft:#f4ead4; --accent-line:#b0833a;
+  --green:#2e7d3c; --red:#c04a4a; --yellow:#8a6a1f; --blue:#3c6ea8;
+  --chip-g-bg:#e6f2e8; --chip-y-bg:#f7eed4; --chip-r-bg:#f9e4e4; --chip-b-bg:#e4edf8; --chip-a-bg:#f6ebd3;
+  --chip-g-bd:#bfd8c4; --chip-y-bd:#dccb94; --chip-r-bd:#e2b4b4; --chip-b-bd:#b7cde7; --chip-a-bd:#dcc390;
+  --sev-e-bg:#fae7e7; --sev-w-bg:#f8efd8; --sev-i-bg:#e5eef9;
+  --sev-e-bd:#e4b6b6; --sev-w-bd:#dccb94; --sev-i-bd:#b7cde7;
+  --pending-bg:linear-gradient(180deg,#faf3e2,#ffffff);
+  --live-bg:linear-gradient(180deg,#fbf5e6,#ffffff);
+  --overlay-bg:rgba(60,54,70,.4);
+  --body-text:#3a342c; --seg-text:#3a342c; --plan-text:#3a342c; --md-text:#3a342c;
+  --live-seg-text:#4a443a; --live-text:#2c261f;
+  --logo-grad:linear-gradient(135deg,#d9b87e,#b98a44);
+  --primary-grad:linear-gradient(135deg,#b98a44,#d9a962);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
@@ -30,13 +60,16 @@ textarea{resize:vertical;line-height:1.8}
 #app{display:flex;height:100%}
 #sidebar{width:228px;flex:none;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 12px;gap:4px;overflow-y:auto}
 .logo{display:flex;align-items:center;gap:10px;padding:6px 10px 16px}
-.logo-mark{width:38px;height:38px;flex:none;border-radius:10px;background:linear-gradient(135deg,#3a2f1e,#5a4526);border:1px solid var(--accent-line);display:flex;align-items:center;justify-content:center;font-size:20px}
+.logo-mark{width:38px;height:38px;flex:none;border-radius:10px;background:var(--logo-grad);border:1px solid var(--accent-line);display:flex;align-items:center;justify-content:center;font-size:20px}
 .logo-name{font-size:16px;font-weight:700;letter-spacing:.5px}
 .logo-sub{font-size:11px;color:var(--dim)}
 .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-s);color:var(--muted);cursor:pointer;border:1px solid transparent;font-size:14px}
 .nav-item:hover{background:var(--panel2);color:var(--text)}
 .nav-item.active{background:var(--panel3);color:var(--text);border-color:var(--border2)}
 .nav-item .ico{width:20px;text-align:center;flex:none}
+.theme-toggle{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-s);border:1px solid var(--border2);background:var(--panel2);color:var(--muted);font-size:14px;cursor:pointer;transition:filter .15s;text-align:left}
+.theme-toggle:hover{color:var(--text);filter:brightness(1.12)}
+.theme-toggle .ico{width:20px;text-align:center;flex:none}
 #sidebar .spacer{flex:1}
 #side-status{padding:10px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--dim);line-height:1.9}
 #side-status b{color:var(--muted);font-weight:600}
@@ -47,7 +80,7 @@ textarea{resize:vertical;line-height:1.8}
 .page-sub{color:var(--muted);font-size:13px;margin-top:4px}
 .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:var(--radius-s);border:1px solid var(--border2);background:var(--panel2);color:var(--text);font-size:14px;transition:filter .15s}
 .btn:hover{filter:brightness(1.15)}
-.btn.primary{background:linear-gradient(135deg,#b98a44,#d9a962);border-color:#a67c3c;color:#1c1508;font-weight:600}
+.btn.primary{background:var(--primary-grad);border-color:#a67c3c;color:#1c1508;font-weight:600}
 .btn.ghost{background:transparent;border-color:var(--border2);color:var(--muted)}
 .btn.ghost:hover{color:var(--text)}
 .btn.danger{background:transparent;border-color:#5a2c2c;color:var(--red)}
@@ -64,11 +97,11 @@ textarea{resize:vertical;line-height:1.8}
 .meta{display:flex;gap:14px;color:var(--dim);font-size:12px;flex-wrap:wrap}
 .meta b{color:var(--muted);font-weight:600}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:99px;font-size:12px;border:1px solid var(--border2);color:var(--muted);background:var(--panel2)}
-.chip.green{color:var(--green);border-color:#2f4a34;background:#16221a}
-.chip.yellow{color:var(--yellow);border-color:#4a4023;background:#221e12}
-.chip.red{color:var(--red);border-color:#4a2626;background:#221414}
-.chip.blue{color:var(--blue);border-color:#24344a;background:#141c26}
-.chip.accent{color:var(--accent);border-color:#4a3a22;background:#221c12}
+.chip.green{color:var(--green);border-color:var(--chip-g-bd);background:var(--chip-g-bg)}
+.chip.yellow{color:var(--yellow);border-color:var(--chip-y-bd);background:var(--chip-y-bg)}
+.chip.red{color:var(--red);border-color:var(--chip-r-bd);background:var(--chip-r-bg)}
+.chip.blue{color:var(--blue);border-color:var(--chip-b-bd);background:var(--chip-b-bg)}
+.chip.accent{color:var(--accent);border-color:var(--chip-a-bd);background:var(--chip-a-bg)}
 .field{margin-bottom:14px}
 .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:6px;font-weight:600}
 .field .hint{font-size:11.5px;color:var(--dim);margin-top:4px}
@@ -91,7 +124,7 @@ textarea{resize:vertical;line-height:1.8}
 .toast-item.err{border-left-color:var(--red)}
 .toast-item.ok{border-left-color:var(--green)}
 @keyframes toastIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
-#overlay{position:fixed;inset:0;background:rgba(10,8,16,.62);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;backdrop-filter:blur(3px)}
+#overlay{position:fixed;inset:0;background:var(--overlay-bg);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;backdrop-filter:blur(3px)}
 #overlay.hidden{display:none}
 #overlay .spin{width:44px;height:44px;border-radius:50%;border:3px solid var(--border2);border-top-color:var(--accent);animation:spin .9s linear infinite}
 #overlay .ov-text{color:var(--muted);font-size:14px}
@@ -105,25 +138,25 @@ textarea{resize:vertical;line-height:1.8}
 /* ---- 创作台（全屏会话页） ---- */
 body.session-mode #sidebar{display:none}
 body.session-mode #main{width:100%}
-.live-area{border:1px solid var(--accent-line);background:linear-gradient(180deg,#231c10,#191426);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px}
+.live-area{border:1px solid var(--accent-line);background:var(--live-bg);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px}
 .live-area.hidden{display:none}
 .live-head{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--accent);font-weight:600;margin-bottom:10px;flex-wrap:wrap}
 .live-head .chip{font-weight:400}
 .live-body{max-height:48vh;overflow-y:auto;padding-right:2px}
 .live-seg{margin-bottom:12px}
 .live-seg-head{font-size:11px;color:var(--dim);margin-bottom:4px}
-.live-seg-text{white-space:pre-wrap;font-size:14px;line-height:1.9;color:#d8d1e6;opacity:.85}
-.live-text{white-space:pre-wrap;font-size:14.5px;line-height:1.9;color:#e9e2f2}
+.live-seg-text{white-space:pre-wrap;font-size:14px;line-height:1.9;color:var(--live-seg-text);opacity:.85}
+.live-text{white-space:pre-wrap;font-size:14.5px;line-height:1.9;color:var(--live-text)}
 .live-cursor{display:inline-block;width:2px;height:1em;background:var(--accent);vertical-align:-2px;margin-left:2px;animation:blink 1s step-end infinite}
 @keyframes blink{50%{opacity:0}}
 .live-log{margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
 .live-log .ll{color:var(--muted)}
 .live-log .ll.plan{color:var(--accent)}
 .live-log .ll.review{color:var(--blue)}
-.pending{border:1px solid var(--accent-line);background:linear-gradient(180deg,#241d12,#1c1826);border-radius:var(--radius);padding:18px 20px;margin-bottom:18px}
+.pending{border:1px solid var(--accent-line);background:var(--pending-bg);border-radius:var(--radius);padding:18px 20px;margin-bottom:18px}
 .pending-title{font-size:15px;font-weight:700;color:var(--accent);margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .pending-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-.text-view{background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-s);padding:14px 16px;white-space:pre-wrap;max-height:360px;overflow-y:auto;font-size:14.5px;line-height:1.9;color:#e6e0ee}
+.text-view{background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-s);padding:14px 16px;white-space:pre-wrap;max-height:360px;overflow-y:auto;font-size:14.5px;line-height:1.9;color:var(--body-text)}
 .q-item{margin-bottom:12px}
 .q-item label{font-size:13px;color:var(--muted);display:block;margin-bottom:5px}
 .q-item label b{color:var(--text)}
@@ -133,7 +166,7 @@ body.session-mode #main{width:100%}
 .panel-box h3{font-size:13.5px;color:var(--muted);margin-bottom:10px;font-weight:700;letter-spacing:.5px;display:flex;align-items:center;gap:7px;justify-content:space-between}
 .seg{background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-s);padding:13px 15px;margin-bottom:10px}
 .seg-head{font-size:11.5px;color:var(--dim);margin-bottom:5px;display:flex;gap:8px;align-items:center}
-.seg-text{white-space:pre-wrap;font-size:14px;color:#e3ddec;line-height:1.9}
+.seg-text{white-space:pre-wrap;font-size:14px;color:var(--seg-text);line-height:1.9}
 .ch-head{font-size:16px;font-weight:700;margin:18px 0 8px;padding-top:14px;border-top:1px dashed var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .log-item{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed var(--border);font-size:12.5px}
 .log-item .lt{color:var(--dim);flex:none;font-family:var(--mono);font-size:11px;padding-top:2px}
@@ -148,12 +181,12 @@ body.session-mode #main{width:100%}
 .score-pill b{color:var(--text)}
 .issue{border:1px solid var(--border);border-radius:var(--radius-s);padding:10px 13px;margin-top:8px;background:var(--panel2)}
 .issue .sev{font-size:11px;padding:1px 8px;border-radius:99px;margin-right:8px}
-.sev.error{background:#2a1414;color:var(--red);border:1px solid #4a2626}
-.sev.warning{background:#241f10;color:var(--yellow);border:1px solid #4a4023}
-.sev.info{background:#131c26;color:var(--blue);border:1px solid #24344a}
+.sev.error{background:var(--sev-e-bg);color:var(--red);border:1px solid var(--sev-e-bd)}
+.sev.warning{background:var(--sev-w-bg);color:var(--yellow);border:1px solid var(--sev-w-bd)}
+.sev.info{background:var(--sev-i-bg);color:var(--blue);border:1px solid var(--sev-i-bd)}
 .issue .idim{color:var(--accent);font-size:12px;margin-left:6px}
 .issue .isug{color:var(--dim);font-size:12.5px;margin-top:3px;padding-left:4px}
-.plan-block{white-space:pre-wrap;color:#ddd6ea;font-size:13.5px;line-height:1.9}
+.plan-block{white-space:pre-wrap;color:var(--plan-text);font-size:13.5px;line-height:1.9}
 .plan-ch{margin:8px 0;padding:10px 14px;background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-s);font-size:13px}
 .plan-ch .pc-title{font-weight:700;color:var(--text)}
 .plan-ch .pc-goal{color:var(--muted)}
@@ -176,7 +209,7 @@ body.session-mode #main{width:100%}
 .prov-card .pc-name{font-weight:700}
 .prov-card .pc-sub{color:var(--dim);font-size:12px}
 .badge-ok{color:var(--green)}
-.markdown-view{white-space:pre-wrap;font-size:14px;color:#e3ddec;line-height:2}
+.markdown-view{white-space:pre-wrap;font-size:14px;color:var(--md-text);line-height:2}
 .guide h2{font-size:19px;margin:26px 0 10px;color:var(--text)}
 .guide h2:first-child{margin-top:0}
 .guide p,.guide li{color:var(--muted);font-size:14px;margin-bottom:8px}
@@ -193,6 +226,7 @@ body.session-mode #main{width:100%}
     <div class='nav-item' data-nav='kb'><span class='ico'>🗂</span>知识库</div>
     <div class='nav-item' data-nav='settings'><span class='ico'>⚙</span>模型与设置</div>
     <div class='nav-item' data-nav='guide'><span class='ico'>📖</span>使用说明</div>
+    <div class='theme-toggle' title='切换深浅色'><span class='ico tt-ico'>🌙</span><span class='tt-label'>深色</span></div>
     <div class='spacer'></div>
     <div id='side-status'>载入中…</div>
   </aside>
@@ -231,6 +265,33 @@ function overlay(text){
   else o.classList.add('hidden');
 }
 function busy(fn, msg){ return async function(...args){ overlay(msg || '处理中…'); try { return await fn.apply(this, args); } catch(e) { toast(e.message, 'err'); } finally { overlay(null); } }; }
+/* ================= 深浅色主题 ================= */
+const THEME_KEY = 'fst-theme';
+function currentTheme(){ return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'; }
+function applyTheme(t, save){
+  document.documentElement.dataset.theme = t;
+  if (save) { try { localStorage.setItem(THEME_KEY, t); } catch (e) {} }
+  const dark = t === 'dark';
+  $$('.tt-ico').forEach(el => { el.textContent = dark ? '🌙' : '☀️'; });
+  $$('.tt-label').forEach(el => { el.textContent = dark ? '深色' : '浅色'; });
+}
+function initTheme(){
+  let saved = null;
+  try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
+  if (saved !== 'light' && saved !== 'dark') {
+    // 首次访问跟随系统偏好
+    saved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+  }
+  applyTheme(saved, false);
+  document.addEventListener('click', e => {
+    const t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('.theme-toggle') || t.closest('#sess-theme')) {
+      applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true);
+    }
+  });
+}
+initTheme();
 /* ================= 全局状态 ================= */
 const G = { state:null, snapshot:null, sessionTab:'text', kbTab:'styles', cands:[], editId:null };
 let autoStreamNext = false; // 本次 paint 后自动开始流式创作
@@ -516,7 +577,7 @@ function paintSession(){
     `<div style="margin-bottom:6px"><a href="#/works" style="font-size:13px">← 我的作品</a></div>` +
     `<div class="sess-head"><div><div class="sess-title">${esc(s.title)}</div><div class="sess-meta" style="margin-top:6px">${statusChip} ${demo}<span class="chip">${esc(MODE_LABEL[s.approvalMode] || s.approvalMode)}</span><span class="chip">${s.plan ? '第 ' + s.chapters.length + ' / ' + s.plan.chapters.length + ' 章' : '规划中…'}</span></div></div>` +
     `<div class="sess-controls"><label style="font-size:12px;color:var(--muted)">审批模式</label><select id="mode-sel">${['auto','segment','chapter'].map(m => `<option value="${m}" ${m===s.approvalMode?'selected':''}>${MODE_LABEL[m]}</option>`).join('')}</select><label style="font-size:12px;color:var(--muted)">审查力度</label><select id="strict-sel">${['standard','strict','lenient'].map(x => `<option value="${x}" ${x===s.strictness?'selected':''}>${STRNESS[x]}</option>`).join('')}</select>` +
-    `<button class="btn primary" id="btn-advance">▶ 继续创作</button><button class="btn danger" id="btn-stop">⏹ 停止</button></div></div>` +
+    `<button class="btn small" id="sess-theme" title="切换深浅色"><span class="tt-ico">🌙</span><span class="tt-label">深色</span></button><button class="btn primary" id="btn-advance">▶ 继续创作</button><button class="btn danger" id="btn-stop">⏹ 停止</button></div></div>` +
     (s.pending ? pendingPanel(s.pending) : '') +
     `<div class="tabs">${[['text','正文'],['plan','创作计划'],['reviews','审查记录'],['notes','作者答复'],['log','活动日志']].map(t => `<div class="tab ${G.sessionTab===t[0]?'active':''}" data-tab="${t[0]}">${t[1]}</div>`).join('')}</div>` +
     `<div id="sess-content"></div></div>`;
@@ -907,7 +968,7 @@ function renderGuide(){
   $('#main').innerHTML = `<div class="page guide"><div class="page-head"><div><div class="page-title">使用说明</div><div class="page-sub">快速上手，一分钟开写。</div></div></div>` +
   `<h2>1. 开始创作</h2><p>在「开始创作」输入故事要求，点击开始。规划、写作、审查都会在创作台实时显示。默认演示模式无需任何配置。</p>` +
   `<h2>2. 审批模式</h2><p><b>自动</b>：生成即采纳；<b>逐段</b>：每段确认；<b>逐章</b>：章末确认。创作中可随时切换。</p>` +
-  `<h2>3. 审查</h2><p>章节与宏观一致性自动检查。可选择重写本章（落实审查意见）、调整下次审查力度或忽略继续。</p>` +
+  `<h2>3. 审查</h2><p>章节与宏观一致性自动检查。逐段/逐章模式下由你决定：重写本章、忽略或调整下次力度；自动模式按规则自动裁决（发现问题即自动重写，最多 1 次，不打断写作）。</p>` +
   `<h2>4. 知识库</h2><ul><li><b>风格库</b>：粘贴范例自动提炼写作规则；</li><li><b>设定库</b>：对话式创建或自动提取；</li><li><b>模板库</b>：保存常用提问模板；</li><li><b>反馈学习</b>：你的修改会自动沉淀为风格偏好。</li></ul>` +
   `<h2>5. 数据</h2><p>作品与知识库全部保存在本项目的 <code>workspace/</code> 目录，本地文件，不上传。</p>` +
   `<h2>6. 配置模型</h2><p>在「模型与设置」填入 API Key 与模型名即可使用真实模型创作。</p></div>`;

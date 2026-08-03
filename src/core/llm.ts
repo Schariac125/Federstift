@@ -201,6 +201,23 @@ export class DemoLLM implements LLMClientLike {
   }
 
   private demoJson(user: string): string {
+    if (user.includes('重写方案')) {
+      // 演示：重写方案规划师输出示例方案，让作者在无模型时也能看到「先出方案再逐段落实」的效果
+      return JSON.stringify({
+        approach: '保持原结构与已确认优点，只修正审查指出的问题：第1段统一佩剑描写为左手剑，第2段精简拖沓对白，结尾保留悬念钩子。',
+        segments: [
+          { order: 1, fix: '把「右手拔剑」改为「左手拔剑」，与设定库保持一致' },
+          { order: 2, fix: '精简对白，把关键信息前置，删去重复交代' }
+        ]
+      });
+    }
+    if (user.includes('诊断')) {
+      // 演示：反复返工诊断（总规划 Agent P1b）
+      return JSON.stringify({
+        diagnosis: '演示诊断：问题不在文笔，而是本章目标与审查重点错位——创作 Agent 按节奏推进，但审查要求突出悬念。建议重写方案把「悬念前置」作为硬约束。',
+        focus: ['把悬念揭示推迟到章末', '删去重复交代的线索']
+      });
+    }
     if (user.includes('计划') || user.includes('创作意图') || user.includes('策略') || user.includes('strategy') || user.includes('outline')) {
       return JSON.stringify({
         premise: '一个关于剑士的悬念式开篇故事。',
@@ -265,7 +282,9 @@ export class DemoLLM implements LLMClientLike {
           score: { overall: 88, plot: 88, character: 90, settingConsistency: 92, style: 84, logic: 88, language: 90, pacing: 86 },
           issues: [],
           strengths: ['设定引用准确，行文流畅'],
-          suggestions: []
+          suggestions: [],
+          action: 'ignore',
+          targetSegments: []
         });
       }
       const issues =
@@ -283,7 +302,9 @@ export class DemoLLM implements LLMClientLike {
             : { overall: 72, plot: 70, character: 75, settingConsistency: 80, style: 65, logic: 70, language: 75, pacing: 70 },
         issues,
         strengths: ['设定引用准确'],
-        suggestions: []
+        suggestions: [],
+        action: strictness === 'strict' ? 'rewrite' : 'patch',
+        targetSegments: strictness === 'strict' ? [] : [2]
       });
     }
     return JSON.stringify({});

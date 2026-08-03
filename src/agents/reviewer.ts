@@ -34,9 +34,16 @@ export interface ReviewScore {
   pacing: number;
 }
 
+/** 审查建议动作：rewrite=整章重写；patch=只重写 targetSegments 指定段落；ignore=记录即可 */
+export type ReviewAction = 'rewrite' | 'patch' | 'ignore';
+
 export interface ReviewReport {
   /** 是否通过审查（error 级问题为不通过） */
   passed: boolean;
+  /** 建议动作（自动模式由规则裁决兜底；可缺省） */
+  action?: ReviewAction;
+  /** patch 时指定要重写的段号（从 1 开始，缺省=自动推断） */
+  targetSegments?: number[];
   score: ReviewScore;
   issues: ReviewIssue[];
   strengths: string[];
@@ -87,14 +94,18 @@ export const REVIEWER_SYSTEM = `你是一位严苛但不啰嗦的小说审查编
     }
   ],
   "strengths": ["设定引用准确，人物对话自然"],
-  "suggestions": ["整体建议1", "整体建议2"]
+  "suggestions": ["整体建议1", "整体建议2"],
+  "action": "patch",
+  "targetSegments": [2, 3]
 }
 
 注意事项：
 - score 各维度为 0-100 整数；
 - issues 按严重程度排序，error 优先；
 - 没有问题的维度不要硬凑 issue；
-- passed = 是否存在 error 级问题（false 表示需要修改）。`;
+- passed = 是否存在 error 级问题（false 表示需要修改）；
+- action 取值：rewrite=整章重写；patch=只重写 targetSegments 指定的段落；ignore=无需重写、记录即可；
+- targetSegments 只在 action=patch 时给出，段号从 1 开始；拿不准时可以不给，自动模式会按规则兜底。`;
 
 export function normalizeScore(raw: Partial<ReviewScore> | undefined): ReviewScore {
   const clamp = (n: number | undefined, def: number) => {
@@ -128,17 +139,45 @@ export function normalizeReview(raw: Partial<ReviewReport> | null): ReviewReport
     .slice(0, 20);
   const score = normalizeScore(raw?.score);
   const hasError = issues.some((i) => i.severity === 'error');
+  const action = raw?.action === 'rewrite' || raw?.action === 'patch' || raw?.action === 'ignore' ? raw.action : undefined;
+  const targetSegments = Array.isArray(raw?.targetSegments)
+    ? [...new Set(raw.targetSegments.map((n) => Math.floor(Number(n))).filter((n) => Number.isFinite(n) && n >= 1 && n <= 30))]
+        .sort((a, b) => a - b)
+        .slice(0, 8)
+    : [];
   return {
     passed: raw?.passed === undefined ? !hasError : Boolean(raw.passed),
     score,
     issues,
     strengths: (Array.isArray(raw?.strengths) ? raw.strengths : []).map(String).filter(Boolean).slice(0, 8),
     suggestions: (Array.isArray(raw?.suggestions) ? raw.suggestions : []).map(String).filter(Boolean).slice(0, 10),
+    action,
+    targetSegments,
   };
 }
 
 function sevRank(s: ReviewSeverity): number {
   return s === 'error' ? 0 : s === 'warning' ? 1 : 2;
+}
+
+/**
+ * 规则层裁决（自动模式用，0 次额外 LLM 调用）：
+ * - 有 error 级问题 → 重写（模型给 patch+目标段则定向，否则整章）；
+ * - 无 error 时：模型明确 rewrite → 整章；模型明确 patch 且有目标段 → 定向；
+ * - 设定一致性 warning 或 warning ≥ 2 → 重写；其余 → ignore（记录继续）。
+ */
+export function decideReviewAction(report: ReviewReport): ReviewAction {
+  const hasError = report.issues.some((i) => i.severity === 'error');
+  const warnings = report.issues.filter((i) => i.severity === 'warning').length;
+  const settingIssues = report.issues.some((i) => i.dimension === 'settingConsistency' && i.severity !== 'info');
+  if (hasError) {
+    if (report.action === 'patch' && (report.targetSegments?.length ?? 0) > 0) return 'patch';
+    return 'rewrite';
+  }
+  if (report.action === 'rewrite') return 'rewrite';
+  if (report.action === 'patch' && (report.targetSegments?.length ?? 0) > 0) return 'patch';
+  if (settingIssues || warnings >= 2) return 'rewrite';
+  return 'ignore';
 }
 
 export interface ReviewInput {
@@ -156,6 +195,20 @@ export interface ReviewInput {
   scope: string;
   /** 审查力度（可留空 = 标准） */
   strictness?: ReviewStrictness;
+}
+
+/** 把审查报告渲染成结构化的重写指令（必须修正 / 保持不变 / 整体建议），供整章重写注入 */
+export function buildRewriteDirective(report: ReviewReport): string {
+  const parts: string[] = [];
+  const fixes = report.issues
+    .filter((i) => i.severity !== 'info')
+    .slice(0, 6)
+    .map((i) => '- [' + i.dimension + '] ' + i.description + (i.suggestion ? '（建议：' + i.suggestion + '）' : ''));
+  parts.push('【必须修正】');
+  parts.push(...(fixes.length ? fixes : ['无（可保持本章结构）']));
+  if (report.strengths.length) parts.push('【保持不变】' + report.strengths.slice(0, 3).join('；'));
+  if (report.suggestions.length) parts.push('【整体建议】' + report.suggestions.slice(0, 3).join('；'));
+  return parts.join('\n');
 }
 
 export function buildReviewUser(input: ReviewInput): string {

@@ -130,28 +130,24 @@ async function main() {
     ok('总规划 Agent（GUI·流式）', '2 章计划 · ' + snapshot.pending.questions.length + ' 个问题待回答');
   } catch (e) { bad('新建/规划', e); }
 
-  // ---- 5. 回答问题 → 自动写作 + 审查 ----
+  // ---- 5. 回答问题 → 自动写作 + 自动审查裁决（规则层，不暂停） ----
   try {
     const q = snapshot.pending.questions[0];
     const d = await api(base, '/api/session/' + snapshot.novelId + '/answer', { method: 'POST', body: { answers: [{ question: q, answer: '主角最怕火。' }] } });
     snapshot = d.snapshot;
     assert.ok(snapshot.authorNotes.some((n) => n.answer === '主角最怕火。'), '开局问题答复未保存');
-    snapshot = await skipQuestions(base, snapshot); // 章节问题可跳过
-    // 自动模式：正文自动采纳，但审查报告必须呈现给作者判断（reviewAfter=true 的章节）
-    snapshot = await streamAdvance(base, snapshot.novelId);
-    snapshot = await skipQuestions(base, snapshot);
-    snapshot = await streamAdvance(base, snapshot.novelId);
+    // 自动模式：正文自动采纳；审查由规则层裁决（strict 报告 → 自动定向重写 1 次 → 超限保留当前版本继续）
+    let guard = 0;
+    while (guard++ < 25 && (!snapshot.pending || snapshot.pending.kind === 'questions')) {
+      snapshot = await streamAdvance(base, snapshot.novelId);
+      snapshot = await skipQuestions(base, snapshot);
+    }
     assert.ok(snapshot.chapters.length >= 1, '第 1 章未生成');
-    assert.ok(snapshot.chapters[0].segments.length === 4, '第 1 章段落数异常: ' + snapshot.chapters[0].segments.length);
+    assert.strictEqual(snapshot.chapters[0].segments.length, 4, '第 1 章段落数异常: ' + snapshot.chapters[0].segments.length);
     assert.ok(snapshot.reviews.length >= 1, '审查记录缺失: ' + snapshot.reviews.length);
     assert.ok(snapshot.authorNotes.some((n) => n.answer === '主角最怕火。'), '作者答复未保存');
-    assert.strictEqual(snapshot.pending.kind, 'review', '自动模式也应在审查后停下等作者判断: ' + snapshot.pending.kind);
-    // 作者判断：忽略本次审查意见，继续创作
-    const rv = await api(base, '/api/session/' + snapshot.novelId + '/decide', { method: 'POST', body: { for: 'review', action: 'ignore' } });
-    snapshot = rv.snapshot;
-    snapshot = await streamAdvance(base, snapshot.novelId);
-    assert.strictEqual(snapshot.pending.kind, 'chapter_done', '忽略审查后应停在 chapter_done: ' + snapshot.pending.kind);
-    ok('问答 + 自动写作 + 审查（流式）', '第 1 章 4 段 · 审查 ' + snapshot.reviews.length + ' 次');
+    assert.strictEqual(snapshot.pending.kind, 'chapter_done', '自动模式审查裁决后应停在本章完成，不再等作者判断: ' + snapshot.pending.kind);
+    ok('问答 + 自动写作 + 自动审查裁决（流式）', '第 1 章 4 段 · 审查 ' + snapshot.reviews.length + ' 次 · 自动重写至多 1 次');
   } catch (e) { bad('自动创作', e); }
 
   // ---- 6. 继续下一章 → 全书写完 ----

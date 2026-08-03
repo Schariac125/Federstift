@@ -149,6 +149,35 @@ export function emptyRetrieval(): RetrievalResult {
   return { settings: [], styles: [], chapterChunks: [], timelineChunks: [], noteChunks: [] };
 }
 
+/** 按 BM25 相关性取 topK 设定条目渲染成摘要（供规划/审查核对；命中不足时回落存储顺序） */
+export function settingsSummaryByRelevance(
+  settings: SettingEntry[],
+  query: string,
+  limit: number,
+  entryCharLimit = 200
+): string {
+  if (!settings.length || limit <= 0) return '';
+  const docs = indexSettings(settings);
+  const hits = bm25Top(query || ' ', docs, Math.min(limit, settings.length));
+  let picked: SettingEntry[];
+  if (hits.length) {
+    const hitIds = new Set(hits.map((h) => h.id));
+    const rank = new Map(hits.map((h, i) => [h.id, i]));
+    picked = settings
+      .filter((s) => hitIds.has('set_' + s.id))
+      .sort((a, b) => rank.get('set_' + a.id)! - rank.get('set_' + b.id)!);
+  } else {
+    picked = settings.slice(0, Math.min(limit, settings.length));
+  }
+  const lines: string[] = [];
+  for (const s of picked) {
+    lines.push('- ' + s.name + '：' + s.content.slice(0, entryCharLimit));
+    for (const f of s.facts) lines.push('  · 事实：' + f.slice(0, entryCharLimit));
+    if (s.aliases?.length) lines.push('  · 别名：' + s.aliases.join('、').slice(0, entryCharLimit));
+  }
+  return lines.join('\n');
+}
+
 /** 把检索结果渲染成注入创作 Agent 的约束文本 */
 export function renderContext(retrieved: RetrievalResult, recentText: string): string {
   const parts: string[] = [];

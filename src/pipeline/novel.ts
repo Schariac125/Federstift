@@ -242,6 +242,45 @@ export function writeReviewsMd(state: NovelState): void {
   fs.writeFileSync(file, lines.join('\n'), 'utf8');
 }
 
+/**
+ * 宏观一致性检查的输入文本：全书章节目录 + 最近 N 章完整正文 + 开篇基础章节选。
+ * 长篇小说不可能全量送入审查，因此按「全局结构 + 最新进展 + 故事根基」组合；
+ * 超出预算时从尾部裁剪：开篇节选最先被裁，最近章节尽量完整保留。
+ */
+export function buildMacroCheckText(
+  chapters: Chapter[],
+  opts?: { recentCount?: number; openingBudget?: number; maxChars?: number }
+): string {
+  const recentCount = Math.max(1, opts?.recentCount ?? 3);
+  const openingBudget = Math.max(0, opts?.openingBudget ?? 1200);
+  const maxChars = Math.max(1000, opts?.maxChars ?? 12000);
+  if (!chapters.length) return '';
+
+  const parts: string[] = [];
+  parts.push('【全书结构】');
+  for (const ch of chapters) parts.push('第 ' + ch.order + ' 章 ' + ch.title);
+
+  const recent = chapters.slice(-recentCount);
+  for (const ch of recent) {
+    parts.push('【第 ' + ch.order + ' 章 · ' + ch.title + '】');
+    for (const seg of ch.segments) parts.push(seg.text);
+  }
+
+  const first = chapters[0];
+  if (!recent.includes(first)) {
+    parts.push('【开篇（第 ' + first.order + ' 章 · ' + first.title + '，节选）】');
+    parts.push(
+      first.segments
+        .map((s) => s.text)
+        .join('\n')
+        .slice(0, openingBudget)
+    );
+  }
+
+  const out = parts.join('\n\n');
+  return out.length > maxChars ? out.slice(0, maxChars) : out;
+}
+
 /** 把创作计划写成可读的 plan.md（作者可校对/修改策略） */
 export function writePlanMd(state: NovelState): void {
   const plan = state.plan;
